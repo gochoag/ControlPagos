@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ControlPagos - Finanzas Personales</title>
+    <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css" />
+
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Outfit", "sans-serif"],
+            },
+            colors: {
+              // Priority Colors
+              // Primary Accent: #3CA6A6 (Teal)
+              // Primary Text: #F2E3D5 (Cream)
+
+              gray: {
+                900: "#012E40", // Deep Background
+                800: "#024959", // Cards / Sidebar
+                700: "#026773", // Borders
+                600: "#3CA6A6", // Active States / Borders
+                500: "#3CA6A6", // Subtitles
+                400: "#F2E3D5", // Body Text (Dimmed)
+                300: "#F2E3D5", // Body Text
+                200: "#F2E3D5", // Headings
+                100: "#F2E3D5", // Brightest Text
+              },
+              dark: {
+                900: "#012E40",
+                800: "#024959",
+                700: "#026773",
+              },
+              brand: {
+                500: "#3CA6A6", // MAIN BRAND COLOR - Buttons, Highlights
+                600: "#2A8F8F", // Hover state (slightly darker)
+                400: "#F2E3D5", // Light accent
+              },
+              // UI Specific
+              emerald: {
+                400: "#3CA6A6", // Replace standard green with Brand Teal
+                500: "#026773",
+              },
+              blue: {
+                400: "#F2E3D5", // Replace standard blue with Cream
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-gray-900 text-gray-100 font-sans antialiased min-h-screen selection:bg-brand-500 selection:text-white"
+  >
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
+      <aside
+        class="w-64 bg-gray-800/50 backdrop-blur-xl border-r border-gray-700/50 hidden md:flex flex-col"
+      >
+        <div class="p-6">
+          <h1
+            class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
+          >
+            <i class="fa-solid fa-wallet mr-2 text-blue-400"></i>ControlPagos
+          </h1>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-2 mt-4">
+          <button
+            onclick="app.navigate('dashboard')"
+            id="nav-dashboard"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-chart-pie w-5"></i>
+            <span>Resumen</span>
+          </button>
+          <button
+            onclick="app.navigate('receivables')"
+            id="nav-receivables"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-hand-holding-dollar w-5"></i>
+            <span>Por Cobrar (Deben)</span>
+          </button>
+          <button
+            onclick="app.navigate('payables')"
+            id="nav-payables"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-money-bill-transfer w-5"></i>
+            <span>Por Pagar (Debo)</span>
+          </button>
+          <button
+            onclick="app.navigate('classes')"
+            id="nav-classes"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-chalkboard-user w-5"></i>
+            <span>Horas Clases</span>
+          </button>
+           <button
+            onclick="app.navigate('savings')"
+            id="nav-savings"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-piggy-bank w-5"></i>
+            <span>Ahorros</span>
+          </button>
+          <button
+            onclick="app.navigate('memberships')"
+            id="nav-memberships"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-id-card w-5"></i>
+            <span>Membresías</span>
+          </button>
+        </nav>
+
+        </nav>
+
+        <!-- Data Management -->
+        <div class="px-4 mb-2 mt-4 border-t border-gray-700/30 pt-4">
+             <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Datos</p>
+             <button onclick="app.downloadBackup()" class="w-full flex items-center space-x-3 px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm group">
+                <i class="fa-solid fa-cloud-arrow-down w-5 group-hover:scale-110 transition-transform"></i>
+                <span>Guardar Copia</span>
+            </button>
+            <label class="w-full flex items-center space-x-3 px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm cursor-pointer group">
+                <i class="fa-solid fa-cloud-arrow-up w-5 group-hover:scale-110 transition-transform"></i>
+                <span>Restaurar</span>
+                <input type="file" class="hidden" onchange="app.restoreBackup(this)" accept=".json">
+            </label>
+        </div>
+
+        <div class="p-4 border-t border-gray-700/50">
+          <div
+            class="bg-gradient-to-br from-indigo-600/20 to-purple-600/20 rounded-xl p-4 border border-indigo-500/20"
+          >
+            <p class="text-xs text-indigo-300 mb-1">Balance Total</p>
+            <h3 id="sidebar-balance" class="text-xl font-bold text-white">
+              $ 0.00
+            </h3>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <main
+        class="flex-1 overflow-y-auto relative bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800"
+      >
+        <!-- Mobile Header -->
+        <div
+          class="md:hidden flex items-center justify-between p-4 bg-gray-800/80 backdrop-blur-md border-b border-gray-700/50 sticky top-0 z-20"
+        >
+          <h1 class="text-xl font-bold text-white">ControlPagos</h1>
+          <button
+            onclick="document.getElementById('mobile-menu').classList.toggle('hidden')"
+            class="p-2 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-bars text-xl"></i>
+          </button>
+        </div>
+        <!-- Mobile Menu Dropdown -->
+        <div
+          id="mobile-menu"
+          class="hidden md:hidden bg-gray-800 border-b border-gray-700 absolute w-full z-10"
+        >
+          <button
+            onclick="app.navigate('dashboard'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Resumen
+          </button>
+          <button
+            onclick="app.navigate('receivables'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Por Cobrar
+          </button>
+          <button
+            onclick="app.navigate('payables'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Por Pagar
+          </button>
+          <button
+            onclick="app.navigate('classes'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Clases
+          </button>
+          <button
+            onclick="app.navigate('memberships'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Membresías
+          </button>
+        </div>
+
+        <div class="p-6 md:p-10 max-w-7xl mx-auto space-y-8" id="main-view">
+          <!-- Content injected by JS -->
+        </div>
+      </main>
+    </div>
+
+    <!-- Modals -->
+    <div
+      id="modal-container"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg transform transition-all scale-100 overflow-hidden"
+        id="modal-content"
+      >
+        <!-- Modal Header -->
+        <div
+          class="flex justify-between items-center p-5 border-b border-gray-700/50 bg-gray-800/50"
+        >
+          <h3 id="modal-title" class="text-xl font-semibold text-white">
+            Nuevo Registro
+          </h3>
+          <button
+            onclick="app.closeModal()"
+            class="text-gray-400 hover:text-white transition-colors"
+          >
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+        <!-- Modal Body -->
+        <div id="modal-body" class="p-6 space-y-4">
+          <!-- Dynamic Form -->
+        </div>
+        <!-- Modal Footer -->
+        <div
+          class="p-5 border-t border-gray-700/50 bg-gray-800/50 flex justify-end space-x-3"
+        >
+          <button
+            onclick="app.closeModal()"
+            class="px-4 py-2 rounded-lg text-gray-300 hover:bg-white/5 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            id="modal-save-btn"
+            class="px-6 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium shadow-lg shadow-brand-500/20 transition-all transform active:scale-95"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div
+      id="confirm-modal"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4 transition-all duration-300"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 opacity-0 transition-all duration-300"
+        id="confirm-modal-content"
+      >
+        <div class="p-6 text-center">
+          <div
+            class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4"
+          >
+            <i
+              class="fa-solid fa-triangle-exclamation text-3xl text-rose-500"
+            ></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-2">¿Estás seguro?</h3>
+          <p class="text-gray-400 text-sm mb-6">
+            Esta acción eliminará el registro permanentemente.
+          </p>
+          <div class="flex space-x-3 justify-center">
+            <button
+              onclick="app.closeConfirmModal()"
+              class="px-5 py-2.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-medium transition"
+            >
+              Cancelar
+            </button>
+            <button
+              id="confirm-delete-btn"
+              class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-lg shadow-rose-500/20 transition"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div
+      id="toast"
+      class="fixed bottom-6 right-6 transform transition-all duration-300 translate-y-20 opacity-0 z-50"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3"
+      >
+        <i class="fa-solid fa-circle-check text-emerald-400 text-xl"></i>
+        <span id="toast-message">Operación exitosa</span>
+      </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+      function toggleMobileMenu() {
+        document.getElementById("mobile-menu").classList.add("hidden");
+      }
+    </script>
+  </body>
+</html>
