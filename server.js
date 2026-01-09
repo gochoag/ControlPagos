@@ -4,7 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const app = express();
-const PORT = 3000;
+const PORT = 4343;
 const DB_FILE = path.join(__dirname, 'db.json');
 
 // Middleware
@@ -64,5 +64,5 @@ app.listen(PORT, () => {
     
     // Auto-open browser (optional, basic logic)
     const { exec } = require('child_process');
-    exec(`start http://localhost:${PORT}/page.html`);
+    exec(`start http://localhost:${PORT}/index.html`);
 });
