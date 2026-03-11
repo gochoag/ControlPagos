@@ -551,12 +551,16 @@ const app = {
 
   // --- MODAL & FORMS ---
 
-  openModal(type, prefillName = '') {
-    this.editingIndex = null; // Reset edit state
+  openModal(type, prefillName = '', options = {}) {
+    const { isEditing = false } = options;
+    if (!isEditing) {
+      this.editingIndex = null;
+    }
     const modal = document.getElementById("modal-container");
     const title = document.getElementById("modal-title");
     const body = document.getElementById("modal-body");
     const saveBtn = document.getElementById("modal-save-btn");
+    saveBtn.textContent = isEditing ? "Actualizar" : "Guardar";
 
     modal.classList.remove("hidden");
     // Small delay to allow display:block to apply before opacity transition
@@ -702,7 +706,7 @@ const app = {
 
   editItem(type, index) {
       this.editingIndex = index;
-      this.openModal(type);
+      this.openModal(type, '', { isEditing: true });
       
       const item = this.data[type][index];
       const title = document.getElementById("modal-title");
