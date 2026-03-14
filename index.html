@@ -149,6 +149,10 @@
                 <span>Restaurar</span>
                 <input type="file" class="hidden" onchange="app.restoreBackup(this)" accept=".json">
             </label>
+            <button onclick="app.subirDbADrive()" class="w-full flex items-center space-x-3 px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm group">
+              <i class="fa-brands fa-google-drive w-5 group-hover:scale-110 transition-transform"></i>
+              <span>Subir db.json a Drive</span>
+            </button>
         </div>
 
         <div class="p-4 border-t border-gray-700/50">
@@ -321,6 +325,7 @@
       </div>
     </div>
 
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="js/app.js"></script>
     <script>
       function toggleMobileMenu() {

@@ -1,4 +1,4 @@
-
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -51,6 +51,89 @@ app.post('/api/data', (req, res) => {
         res.json({ success: true, message: 'Saved successfully' });
     } catch (err) {
         res.status(500).json({ error: 'Error writing database' });
+    }
+});
+
+app.get('/api/config', (req, res) => {
+    res.json({
+        googleClientId: process.env.ID_CLIENTE || '',
+        googleDriveFolderId: process.env.GDRIVE_FOLDER_ID || ''
+    });
+});
+
+app.post('/api/drive/upload-db', async (req, res) => {
+    try {
+        const { accessToken, folderId } = req.body || {};
+        const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
+
+        if (!accessToken) {
+            return res.status(400).json({ error: 'Falta accessToken' });
+        }
+
+        if (!targetFolderId) {
+            return res.status(400).json({ error: 'Falta folderId o GDRIVE_FOLDER_ID' });
+        }
+
+        if (!fs.existsSync(DB_FILE)) {
+            return res.status(404).json({ error: 'No existe db.json para subir' });
+        }
+
+        const fileName = 'db.json';
+        const fileBuffer = fs.readFileSync(DB_FILE);
+        const escapedFileName = fileName.replace(/'/g, "\\'");
+        const query = encodeURIComponent(`name='${escapedFileName}' and '${targetFolderId}' in parents and trashed=false`);
+
+        const searchResponse = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&pageSize=1`,
+            {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`
+                }
+            }
+        );
+
+        if (!searchResponse.ok) {
+            const detail = await searchResponse.text();
+            return res.status(400).json({ error: 'Error buscando archivo en Drive', detail });
+        }
+
+        const searchData = await searchResponse.json();
+        const existingFile = Array.isArray(searchData.files) ? searchData.files[0] : null;
+
+        const metadata = existingFile
+            ? { name: fileName }
+            : { name: fileName, parents: [targetFolderId] };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', new Blob([fileBuffer], { type: 'application/json' }), fileName);
+
+        const uploadUrl = existingFile
+            ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
+            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+
+        const uploadResponse = await fetch(uploadUrl, {
+            method: existingFile ? 'PATCH' : 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            },
+            body: form
+        });
+
+        const uploadText = await uploadResponse.text();
+        if (!uploadResponse.ok) {
+            return res.status(400).json({ error: 'Error subiendo db.json', detail: uploadText });
+        }
+
+        const uploadedFile = JSON.parse(uploadText);
+        res.json({
+            success: true,
+            action: existingFile ? 'updated' : 'created',
+            fileId: uploadedFile.id,
+            name: uploadedFile.name
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Fallo en subida a Drive', detail: err.message });
     }
 });
 

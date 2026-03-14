@@ -6,11 +6,71 @@ const app = {
     memberships: [], // Membresias (GPT)
   },
   currentView: "dashboard",
+  config: {
+    googleClientId: "",
+    googleDriveFolderId: "",
+  },
+  googleTokenClient: null,
+  googleAccessToken: "",
+  oauthTokenPromiseResolvers: null,
 
 
     async init() {
+        await this.loadPublicConfig();
+        this.initGoogleOAuth();
         await this.loadData();
         this.navigate('dashboard');
+    },
+
+    async loadPublicConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (!response.ok) throw new Error('No se pudo cargar configuración pública');
+            this.config = await response.json();
+        } catch (error) {
+            console.warn('No se pudo cargar configuración de Google Drive', error);
+        }
+    },
+
+    initGoogleOAuth() {
+        if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+            return;
+        }
+        if (!this.config.googleClientId) {
+            return;
+        }
+
+        this.googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: this.config.googleClientId,
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            callback: (tokenResponse) => {
+                if (tokenResponse.error) {
+                    if (this.oauthTokenPromiseResolvers) {
+                        this.oauthTokenPromiseResolvers.reject(new Error(tokenResponse.error));
+                        this.oauthTokenPromiseResolvers = null;
+                    }
+                    return;
+                }
+
+                this.googleAccessToken = tokenResponse.access_token;
+                if (this.oauthTokenPromiseResolvers) {
+                    this.oauthTokenPromiseResolvers.resolve(this.googleAccessToken);
+                    this.oauthTokenPromiseResolvers = null;
+                }
+            },
+        });
+    },
+
+    requestGoogleAccessToken(promptMode = 'consent') {
+        return new Promise((resolve, reject) => {
+            if (!this.googleTokenClient) {
+                reject(new Error('OAuth de Google no inicializado'));
+                return;
+            }
+
+            this.oauthTokenPromiseResolvers = { resolve, reject };
+            this.googleTokenClient.requestAccessToken({ prompt: promptMode });
+        });
     },
 
     async loadData() {
@@ -102,6 +162,54 @@ const app = {
         };
         reader.readAsText(file);
         input.value = '';
+    },
+
+    async subirDbADrive() {
+        try {
+            if (!this.config.googleClientId) {
+                this.showToast('Falta ID_CLIENTE en configuración', 'error');
+                return;
+            }
+
+            if (!this.config.googleDriveFolderId) {
+                this.showToast('Falta GDRIVE_FOLDER_ID en configuración', 'error');
+                return;
+            }
+
+            if (!this.googleTokenClient) {
+                this.initGoogleOAuth();
+            }
+
+            if (!this.googleTokenClient) {
+                this.showToast('No se pudo iniciar OAuth de Google', 'error');
+                return;
+            }
+
+            const token = this.googleAccessToken || await this.requestGoogleAccessToken('consent');
+
+            const response = await fetch('/api/drive/upload-db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accessToken: token,
+                    folderId: this.config.googleDriveFolderId,
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'No se pudo subir db.json a Drive');
+            }
+
+            if (result.action === 'updated') {
+                this.showToast('db.json actualizado en Google Drive');
+            } else {
+                this.showToast('db.json subido a Google Drive');
+            }
+        } catch (error) {
+            console.error('Error al subir db.json a Drive:', error);
+            this.showToast('Error al subir db.json a Drive', 'error');
+        }
     },
 
   navigate(view) {
