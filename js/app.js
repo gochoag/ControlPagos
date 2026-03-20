@@ -13,12 +13,19 @@ const app = {
   googleTokenClient: null,
   googleAccessToken: "",
   oauthTokenPromiseResolvers: null,
+  themes: [
+    { id: 'green-cascade', name: 'Green Cascade' },
+    { id: 'deep-purple', name: 'Deep Purple' },
+    { id: 'midnight-blue', name: 'Midnight Blue' }
+  ],
+  currentThemeIndex: 0,
 
 
     async init() {
         await this.loadPublicConfig();
         this.initGoogleOAuth();
         await this.loadData();
+        this.loadTheme();
         this.navigate('dashboard');
     },
 
@@ -1037,6 +1044,44 @@ const app = {
               input.setSelectionRange(len, len);
           }
       }, 0);
+  },
+
+  loadTheme() {
+    const savedThemeIndex = localStorage.getItem('themeIndex');
+    if (savedThemeIndex !== null) {
+      this.currentThemeIndex = parseInt(savedThemeIndex);
+    }
+    this.applyTheme();
+  },
+
+  applyTheme() {
+    const theme = this.themes[this.currentThemeIndex];
+    document.documentElement.setAttribute('data-theme', theme.id);
+    const themeNameEl = document.getElementById('current-theme-name');
+    if (themeNameEl) {
+      themeNameEl.textContent = theme.name;
+    }
+    // Highlight active option in dropdown
+    this.themes.forEach((_, i) => {
+      const opt = document.getElementById(`theme-opt-${i}`);
+      if (!opt) return;
+      if (i === this.currentThemeIndex) {
+        opt.classList.add('text-white', 'bg-white/10');
+      } else {
+        opt.classList.remove('text-white', 'bg-white/10');
+      }
+    });
+  },
+
+  setTheme(index) {
+    this.currentThemeIndex = index;
+    localStorage.setItem('themeIndex', this.currentThemeIndex);
+    this.applyTheme();
+    this.showToast(`Tema: ${this.themes[index].name}`);
+  },
+
+  cycleTheme() {
+    this.setTheme((this.currentThemeIndex + 1) % this.themes.length);
   },
 };
 

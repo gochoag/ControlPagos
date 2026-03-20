@@ -1,3 +1,40 @@
+/* Theme Variables */
+:root {
+  --theme-bg-900: #012E40;
+  --theme-bg-800: #024959;
+  --theme-bg-700: #026773;
+  --theme-accent: #3CA6A6;
+  --theme-accent-hover: #2A8F8F;
+  --theme-text: #F2E3D5;
+}
+
+[data-theme="green-cascade"] {
+  --theme-bg-900: #012E40;
+  --theme-bg-800: #024959;
+  --theme-bg-700: #026773;
+  --theme-accent: #3CA6A6;
+  --theme-accent-hover: #2A8F8F;
+  --theme-text: #F2E3D5;
+}
+
+[data-theme="deep-purple"] {
+  --theme-bg-900: #1a0f2e;
+  --theme-bg-800: #2d1b4e;
+  --theme-bg-700: #3d2663;
+  --theme-accent: #8b5cf6;
+  --theme-accent-hover: #7c3aed;
+  --theme-text: #e9d5ff;
+}
+
+[data-theme="midnight-blue"] {
+  --theme-bg-900: #0a0e27;
+  --theme-bg-800: #151b3d;
+  --theme-bg-700: #1e2749;
+  --theme-accent: #6366f1;
+  --theme-accent-hover: #4f46e5;
+  --theme-text: #ddd6fe;
+}
+
 /* Custom Scrollbar for Webkit */
 ::-webkit-scrollbar {
   width: 6px;
