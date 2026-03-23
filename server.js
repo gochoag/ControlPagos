@@ -666,13 +666,6 @@ app.listen(PORT, () => {
     console.log(`Abre tu navegador en: http://localhost:${PORT}`);
     console.log('==================================================\n');
 
-    initializeWhatsApp().catch((error) => {
-        setWhatsappState('error', {
-            lastError: error.message,
-        });
-        console.error('No se pudo iniciar WhatsApp:', error.message);
-    });
-
     if (process.platform === 'win32') {
         const { exec } = require('child_process');
         exec(`start http://localhost:${PORT}/index.html`);

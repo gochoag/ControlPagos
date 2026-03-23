@@ -95,14 +95,6 @@ const app = {
     },
 
     async initWhatsApp() {
-        try {
-            await fetch('/api/whatsapp/init', {
-                method: 'POST',
-            });
-        } catch (error) {
-            console.warn('No se pudo pedir la inicializacion de WhatsApp', error);
-        }
-
         await this.refreshWhatsAppStatus();
         this.startWhatsAppPolling();
     },
@@ -1909,6 +1901,8 @@ const app = {
     this.setTheme((this.currentThemeIndex + 1) % this.themes.length);
   },
 };
+
+window.app = app;
 
 // Start App when DOM ready
 document.addEventListener("DOMContentLoaded", () => {
