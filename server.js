@@ -25,6 +25,10 @@ let whatsappInitPromise = null;
 let qrExpiryTimer = null;
 let authReadyTimer = null;
 let restartInProgress = false;
+let lastRecoverableWhatsappLog = {
+    message: '',
+    at: 0,
+};
 const whatsappState = {
     status: 'idle',
     qr: '',
@@ -457,7 +461,9 @@ const isRecoverableWhatsAppError = (error) => {
     const message = error && error.message ? error.message : String(error || '');
     return message.includes('Execution context was destroyed')
         || message.includes('Cannot find context with specified id')
-        || message.includes('Navigating frame was detached');
+        || message.includes('Navigating frame was detached')
+        || message.includes('Target closed')
+        || message.includes('Attempted to use detached Frame');
 };
 
 const handleRecoverableWhatsAppError = (error) => {
@@ -465,7 +471,21 @@ const handleRecoverableWhatsAppError = (error) => {
         return false;
     }
 
-    console.warn('WhatsApp fallo de forma recuperable:', error.message || error);
+    const message = error && error.message ? error.message : String(error || '');
+    const now = Date.now();
+    const shouldLog = !restartInProgress && (
+        lastRecoverableWhatsappLog.message !== message
+        || (now - lastRecoverableWhatsappLog.at) > 5000
+    );
+
+    if (shouldLog) {
+        console.warn('WhatsApp se reiniciara tras un error recuperable:', message);
+        lastRecoverableWhatsappLog = {
+            message,
+            at: now,
+        };
+    }
+
     setWhatsappState('restarting', {
         lastError: 'WhatsApp se reiniciara tras un error interno temporal.',
     });
