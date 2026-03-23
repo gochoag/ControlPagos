@@ -1,6 +1,7 @@
 const app = {
   data: {
     receivables: [], // Deben (Jimy, Alan, etc)
+    receivableContacts: [], // Ficha persistente de clientes por cobrar
     payables: [], // Debo (Tienda, Gualpa)
     classes: [], // Horas Clases (Juan)
     memberships: [], // Membresias (GPT)
@@ -13,12 +14,24 @@ const app = {
   googleTokenClient: null,
   googleAccessToken: "",
   oauthTokenPromiseResolvers: null,
+  whatsapp: {
+    status: "idle",
+    qrDataUrl: "",
+    qrGeneratedAt: null,
+    qrExpiresAt: null,
+    info: null,
+    lastError: "",
+  },
+  whatsappPollInterval: null,
+  whatsappActionInFlight: false,
   themes: [
     { id: 'green-cascade', name: 'Green Cascade' },
     { id: 'deep-purple', name: 'Deep Purple' },
     { id: 'midnight-blue', name: 'Midnight Blue' }
   ],
   currentThemeIndex: 0,
+  reportFormatter: window.ControlPagosReportFormatter,
+  driveMenuOpen: false,
 
 
     async init() {
@@ -26,6 +39,7 @@ const app = {
         this.initGoogleOAuth();
         await this.loadData();
         this.loadTheme();
+        await this.initWhatsApp();
         this.navigate('dashboard');
     },
 
@@ -80,6 +94,336 @@ const app = {
         });
     },
 
+    async initWhatsApp() {
+        try {
+            await fetch('/api/whatsapp/init', {
+                method: 'POST',
+            });
+        } catch (error) {
+            console.warn('No se pudo pedir la inicializacion de WhatsApp', error);
+        }
+
+        await this.refreshWhatsAppStatus();
+        this.startWhatsAppPolling();
+    },
+
+    startWhatsAppPolling() {
+        if (this.whatsappPollInterval) {
+            return;
+        }
+
+        this.whatsappPollInterval = setInterval(() => {
+            this.refreshWhatsAppStatus();
+        }, 3000);
+    },
+
+    async refreshWhatsAppStatus() {
+        try {
+            const response = await fetch('/api/whatsapp/status');
+            if (!response.ok) {
+                throw new Error('No se pudo consultar el estado de WhatsApp');
+            }
+
+            const result = await response.json();
+            this.whatsapp = {
+                status: result.status || 'idle',
+                qrDataUrl: result.qrDataUrl || '',
+                qrGeneratedAt: result.qrGeneratedAt || null,
+                qrExpiresAt: result.qrExpiresAt || null,
+                info: result.info || null,
+                lastError: result.lastError || '',
+            };
+        } catch (error) {
+            console.error('Error consultando estado de WhatsApp', error);
+            this.whatsapp = {
+                status: 'error',
+                qrDataUrl: '',
+                qrGeneratedAt: null,
+                qrExpiresAt: null,
+                info: null,
+                lastError: error.message,
+            };
+        }
+
+        this.updateWhatsAppUI();
+
+        const whatsAppModal = document.getElementById('whatsapp-modal');
+        if (whatsAppModal && !whatsAppModal.classList.contains('hidden') && this.whatsapp.status !== 'ready') {
+            if (this.whatsapp.status === 'qr_expired' || (this.whatsapp.qrDataUrl && this.isQrExpired())) {
+                this.ensureFreshQr();
+            }
+        }
+    },
+
+    getWhatsAppStatusMeta() {
+        const status = this.whatsapp.status;
+
+        switch (status) {
+            case 'ready':
+                return {
+                    badge: 'Conectado',
+                    badgeClass: 'bg-emerald-500/20 text-emerald-300',
+                    text: 'Cliente listo para enviar mensajes.',
+                    qrButtonText: 'Ver estado',
+                };
+            case 'qr':
+                return {
+                    badge: 'QR listo',
+                    badgeClass: 'bg-amber-500/20 text-amber-300',
+                    text: 'Escanea el QR para vincular tu sesion.',
+                    qrButtonText: 'Ver QR',
+                };
+            case 'authenticated':
+                return {
+                    badge: 'Cargando',
+                    badgeClass: 'bg-blue-500/20 text-blue-300',
+                    text: 'QR escaneado. Terminando la vinculacion...',
+                    qrButtonText: 'Ver QR',
+                };
+            case 'restarting':
+            case 'qr_expired':
+                return {
+                    badge: 'Renovando',
+                    badgeClass: 'bg-amber-500/20 text-amber-300',
+                    text: this.whatsapp.lastError || 'Generando un QR nuevo...',
+                    qrButtonText: 'Ver QR',
+                };
+            case 'loading':
+            case 'initializing':
+                return {
+                    badge: 'Cargando',
+                    badgeClass: 'bg-blue-500/20 text-blue-300',
+                    text: 'WhatsApp se esta preparando...',
+                    qrButtonText: 'Ver estado',
+                };
+            case 'auth_failure':
+                return {
+                    badge: 'Error',
+                    badgeClass: 'bg-rose-500/20 text-rose-300',
+                    text: this.whatsapp.lastError || 'Hubo un problema autenticando la sesion.',
+                    qrButtonText: 'Revisar',
+                };
+            case 'disconnected':
+                return {
+                    badge: 'Desconectado',
+                    badgeClass: 'bg-rose-500/20 text-rose-300',
+                    text: 'La sesion se desconecto. Puedes reiniciarla.',
+                    qrButtonText: 'Reconectar',
+                };
+            case 'error':
+                return {
+                    badge: 'Error',
+                    badgeClass: 'bg-rose-500/20 text-rose-300',
+                    text: this.whatsapp.lastError || 'No se pudo iniciar WhatsApp.',
+                    qrButtonText: 'Revisar',
+                };
+            default:
+                return {
+                    badge: 'Inactivo',
+                    badgeClass: 'bg-gray-700 text-gray-300',
+                    text: 'Esperando inicializacion de WhatsApp.',
+                    qrButtonText: 'Ver QR',
+                };
+        }
+    },
+
+    updateWhatsAppUI() {
+        const meta = this.getWhatsAppStatusMeta();
+        const qrButton = document.getElementById('whatsapp-action-btn');
+        const qrImage = document.getElementById('whatsapp-qr-image');
+        const qrPlaceholder = document.getElementById('whatsapp-qr-placeholder');
+        const qrMessage = document.getElementById('whatsapp-qr-message');
+        const qrStatus = document.getElementById('whatsapp-qr-status');
+        const modalActionBtn = document.getElementById('whatsapp-modal-action-btn');
+
+        if (qrButton) {
+            const isReady = this.whatsapp.status === 'ready';
+            qrButton.innerHTML = isReady
+                ? '<span class="inline-flex items-center justify-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Conectado</span></span>'
+                : 'Conectar';
+            qrButton.className = isReady
+                ? 'w-full px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm font-medium transition hover:bg-emerald-500/20'
+                : 'w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition';
+        }
+
+        if (modalActionBtn) {
+            if (this.whatsapp.status === 'ready') {
+                modalActionBtn.textContent = 'Desconectar';
+                modalActionBtn.className = 'px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-colors';
+            } else {
+                modalActionBtn.textContent = 'Regenerar QR';
+                modalActionBtn.className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors';
+            }
+        }
+
+        if (qrImage && qrPlaceholder) {
+            if (this.whatsapp.qrDataUrl) {
+                qrImage.src = this.whatsapp.qrDataUrl;
+                qrImage.classList.remove('hidden');
+                qrPlaceholder.classList.add('hidden');
+            } else {
+                qrImage.removeAttribute('src');
+                qrImage.classList.add('hidden');
+                qrPlaceholder.classList.remove('hidden');
+            }
+        }
+
+        if (qrMessage) {
+            if (this.whatsapp.status === 'ready') {
+                qrMessage.textContent = 'La sesion ya esta conectada.';
+            } else if (this.whatsapp.status === 'authenticated') {
+                qrMessage.textContent = 'QR escaneado. Esperando la conexion final...';
+            } else if (this.isQrExpired()) {
+                qrMessage.textContent = 'El QR vencio. Generando uno nuevo...';
+            } else {
+                qrMessage.textContent = this.whatsapp.lastError || 'Esperando QR...';
+            }
+        }
+
+        if (qrStatus) {
+            if (this.whatsapp.status === 'ready') {
+                qrStatus.textContent = 'WhatsApp listo. Ya puedes enviar reportes desde "Por Cobrar".';
+            } else if (this.whatsapp.qrDataUrl) {
+                const secondsLeft = this.getQrSecondsLeft();
+                qrStatus.textContent = secondsLeft > 0
+                    ? `Abre WhatsApp en tu telefono y escanea este codigo. Se renueva solo en ${secondsLeft}s.`
+                    : 'El QR ya vencio. Se esta generando uno nuevo.';
+            } else {
+                qrStatus.textContent = meta.text;
+            }
+        }
+    },
+
+    isQrExpired() {
+        if (!this.whatsapp.qrExpiresAt) {
+            return false;
+        }
+
+        return Date.now() >= new Date(this.whatsapp.qrExpiresAt).getTime();
+    },
+
+    getQrSecondsLeft() {
+        if (!this.whatsapp.qrExpiresAt) {
+            return 0;
+        }
+
+        const diffMs = new Date(this.whatsapp.qrExpiresAt).getTime() - Date.now();
+        return Math.max(0, Math.ceil(diffMs / 1000));
+    },
+
+    async ensureFreshQr() {
+        const needsRestart = ['idle', 'error', 'disconnected', 'auth_failure', 'qr_expired'].includes(this.whatsapp.status)
+            || (this.whatsapp.qrDataUrl && this.isQrExpired());
+
+        if (needsRestart) {
+            await this.restartWhatsApp(true);
+            return;
+        }
+
+        if (!this.whatsapp.qrDataUrl && !['authenticated', 'ready', 'initializing', 'loading', 'restarting'].includes(this.whatsapp.status)) {
+            try {
+                await fetch('/api/whatsapp/init', {
+                    method: 'POST',
+                });
+                await this.refreshWhatsAppStatus();
+            } catch (error) {
+                console.error('No se pudo pedir un QR nuevo', error);
+            }
+        }
+    },
+
+    async openWhatsAppModal() {
+        const modal = document.getElementById('whatsapp-modal');
+        const content = document.getElementById('whatsapp-modal-content');
+        if (!modal || !content) return;
+
+        modal.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            content.classList.remove('scale-95', 'opacity-0');
+        });
+
+        await this.refreshWhatsAppStatus();
+        if (this.whatsapp.status !== 'ready') {
+            await this.ensureFreshQr();
+        }
+    },
+
+    closeWhatsAppModal() {
+        const modal = document.getElementById('whatsapp-modal');
+        const content = document.getElementById('whatsapp-modal-content');
+        if (!modal || !content) return;
+
+        content.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 200);
+    },
+
+    async restartWhatsApp(silent = false) {
+        if (this.whatsappActionInFlight) {
+            return;
+        }
+
+        this.whatsappActionInFlight = true;
+        try {
+            const response = await fetch('/api/whatsapp/restart', {
+                method: 'POST',
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || result.detail || 'No se pudo reiniciar WhatsApp');
+            }
+
+            if (!silent) {
+                this.showToast('Cliente de WhatsApp reiniciado');
+            }
+            await this.refreshWhatsAppStatus();
+        } catch (error) {
+            console.error('Error reiniciando WhatsApp', error);
+            if (!silent) {
+                this.showToast(error.message || 'No se pudo reiniciar WhatsApp', 'error');
+            }
+        } finally {
+            this.whatsappActionInFlight = false;
+        }
+    },
+
+    async disconnectWhatsApp() {
+        if (this.whatsappActionInFlight) {
+            return;
+        }
+
+        this.whatsappActionInFlight = true;
+        try {
+            const response = await fetch('/api/whatsapp/disconnect', {
+                method: 'POST',
+            });
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || result.detail || 'No se pudo desconectar WhatsApp');
+            }
+
+            this.showToast('Sesion de WhatsApp desconectada');
+            await this.refreshWhatsAppStatus();
+        } catch (error) {
+            console.error('Error desconectando WhatsApp', error);
+            this.showToast(error.message || 'No se pudo desconectar WhatsApp', 'error');
+        } finally {
+            this.whatsappActionInFlight = false;
+        }
+    },
+
+    async handleWhatsAppModalAction() {
+        if (this.whatsapp.status === 'ready') {
+            await this.disconnectWhatsApp();
+            return;
+        }
+
+        await this.restartWhatsApp();
+    },
+
     async loadData() {
         try {
             // Try fetching from Server (db.json)
@@ -98,25 +442,28 @@ const app = {
                 try {
                     this.data = JSON.parse(stored);
                 } catch (parseErr) {
-                    this.data = { receivables: [], payables: [], classes: [], memberships: [], savings: [] };
+                    this.data = { receivables: [], receivableContacts: [], payables: [], classes: [], memberships: [], savings: [] };
                 }
             } else {
-                this.data = { receivables: [], payables: [], classes: [], memberships: [], savings: [] };
+                this.data = { receivables: [], receivableContacts: [], payables: [], classes: [], memberships: [], savings: [] };
                 // Don't auto-save seed to server yet to avoid overwriting invalid state
             }
         }
         
         // Ensure structure matches schema
         if (!this.data.receivables) this.data.receivables = [];
+        if (!this.data.receivableContacts) this.data.receivableContacts = [];
         if (!this.data.payables) this.data.payables = [];
         if (!this.data.classes) this.data.classes = [];
         if (!this.data.memberships) this.data.memberships = [];
         if (!this.data.savings) this.data.savings = [];
+        this.syncReceivableContacts();
 
         this.updateSidebarBalance();
     },
 
     async saveData() {
+        this.syncReceivableContacts();
         // 1. Save locally immediately for speed/backup
         localStorage.setItem('controlPagosData_v1', JSON.stringify(this.data));
         this.updateSidebarBalance();
@@ -161,10 +508,10 @@ const app = {
                     this.navigate(this.currentView);
                     this.showToast('Datos restaurados correctamente');
                 } else {
-                    alert('Formato incorrecto');
+                    this.showToast('Formato incorrecto');
                 }
             } catch (err) {
-                alert('Error al leer archivo');
+                this.showToast('Error al leer archivo');
             }
         };
         reader.readAsText(file);
@@ -216,6 +563,79 @@ const app = {
         } catch (error) {
             console.error('Error al subir db.json a Drive:', error);
             this.showToast('Error al subir db.json a Drive', 'error');
+        }
+    },
+
+    async restaurarDbDesdeDrive() {
+        try {
+            if (!this.config.googleClientId) {
+                this.showToast('Falta ID_CLIENTE en configuración', 'error');
+                return;
+            }
+
+            if (!this.config.googleDriveFolderId) {
+                this.showToast('Falta GDRIVE_FOLDER_ID en configuración', 'error');
+                return;
+            }
+
+            if (!this.googleTokenClient) {
+                this.initGoogleOAuth();
+            }
+
+            if (!this.googleTokenClient) {
+                this.showToast('No se pudo iniciar OAuth de Google', 'error');
+                return;
+            }
+
+            const token = this.googleAccessToken || await this.requestGoogleAccessToken('consent');
+
+            const response = await fetch('/api/drive/restore-db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    accessToken: token,
+                    folderId: this.config.googleDriveFolderId,
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || result.detail || 'No se pudo restaurar db.json desde Drive');
+            }
+
+            this.data = result.data;
+            this.syncReceivableContacts();
+            localStorage.setItem('controlPagosData_v1', JSON.stringify(this.data));
+            this.updateSidebarBalance();
+            this.navigate(this.currentView);
+            this.showToast('Datos restaurados desde Google Drive');
+        } catch (error) {
+            console.error('Error al restaurar db.json desde Drive:', error);
+            this.showToast(error.message || 'Error al restaurar desde Drive', 'error');
+        }
+    },
+
+    toggleDriveMenu() {
+        this.driveMenuOpen = !this.driveMenuOpen;
+        const menu = document.getElementById('drive-actions');
+        const chevron = document.getElementById('drive-chevron');
+        if (menu) {
+            menu.classList.toggle('hidden', !this.driveMenuOpen);
+        }
+        if (chevron) {
+            chevron.style.transform = this.driveMenuOpen ? 'rotate(180deg)' : '';
+        }
+    },
+
+    closeDriveMenu() {
+        this.driveMenuOpen = false;
+        const menu = document.getElementById('drive-actions');
+        const chevron = document.getElementById('drive-chevron');
+        if (menu) {
+            menu.classList.add('hidden');
+        }
+        if (chevron) {
+            chevron.style.transform = '';
         }
     },
 
@@ -311,6 +731,163 @@ const app = {
     if (balance > 0) el.classList.add("text-emerald-400");
     else if (balance < 0) el.classList.add("text-rose-400");
     else el.classList.add("text-white");
+  },
+
+  sanitizeEntityName(name) {
+    return String(name || "").trim();
+  },
+
+  syncReceivableContacts() {
+    const existingContacts = Array.isArray(this.data.receivableContacts)
+      ? this.data.receivableContacts
+      : [];
+    const contactMap = new Map();
+
+    existingContacts.forEach((contact) => {
+      const name = this.sanitizeEntityName(contact.name);
+      if (!name) return;
+
+      const normalizedPhone = this.normalizePhoneInput(contact.phone || "");
+      contactMap.set(name, {
+        id: contact.id || Date.now() + Math.floor(Math.random() * 1000),
+        name,
+        phone: normalizedPhone === null ? "" : normalizedPhone,
+      });
+    });
+
+    this.data.receivables.forEach((item) => {
+      const name = this.sanitizeEntityName(item.name);
+      if (!name) return;
+
+      const normalizedPhone = this.normalizePhoneInput(item.phone || "");
+      if (!contactMap.has(name)) {
+        contactMap.set(name, {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          name,
+          phone: normalizedPhone && normalizedPhone !== null ? normalizedPhone : "",
+        });
+        return;
+      }
+
+      const current = contactMap.get(name);
+      if (!current.phone && normalizedPhone && normalizedPhone !== null) {
+        current.phone = normalizedPhone;
+      }
+    });
+
+    this.data.receivableContacts = Array.from(contactMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+    );
+  },
+
+  getReceivableContact(name) {
+    const cleanName = this.sanitizeEntityName(name);
+    return (this.data.receivableContacts || []).find((contact) => contact.name === cleanName) || null;
+  },
+
+  upsertReceivableContact(name, phone = "") {
+    const cleanName = this.sanitizeEntityName(name);
+    if (!cleanName) return null;
+
+    const normalizedPhone = this.normalizePhoneInput(phone || "");
+    const safePhone = normalizedPhone === null ? "" : normalizedPhone;
+    const existing = this.getReceivableContact(cleanName);
+
+    if (existing) {
+      existing.phone = safePhone || existing.phone || "";
+      return existing;
+    }
+
+    const contact = {
+      id: Date.now(),
+      name: cleanName,
+      phone: safePhone,
+    };
+    this.data.receivableContacts.push(contact);
+    this.syncReceivableContacts();
+    return contact;
+  },
+
+  renameReceivableContact(oldName, newName, phone = "") {
+    const cleanOldName = this.sanitizeEntityName(oldName);
+    const cleanNewName = this.sanitizeEntityName(newName);
+    if (!cleanNewName) return false;
+
+    const normalizedPhone = this.normalizePhoneInput(phone || "");
+    if (normalizedPhone === null) return null;
+
+    const targetPhone = normalizedPhone || "";
+    const currentContact = this.getReceivableContact(cleanOldName);
+    const duplicateContact = this.getReceivableContact(cleanNewName);
+
+    this.data.receivables.forEach((item) => {
+      if ((item.name || "") === cleanOldName) {
+        item.name = cleanNewName;
+      }
+      if ((item.name || "") === cleanNewName) {
+        if (targetPhone) item.phone = targetPhone;
+        else delete item.phone;
+      }
+    });
+
+    if (duplicateContact && duplicateContact !== currentContact) {
+      duplicateContact.phone = targetPhone || duplicateContact.phone || "";
+      this.data.receivableContacts = this.data.receivableContacts.filter(
+        (contact) => contact !== currentContact
+      );
+    } else if (currentContact) {
+      currentContact.name = cleanNewName;
+      currentContact.phone = targetPhone;
+    } else {
+      this.data.receivableContacts.push({
+        id: Date.now(),
+        name: cleanNewName,
+        phone: targetPhone,
+      });
+    }
+
+    this.syncReceivableContacts();
+    return true;
+  },
+
+  getGroupedCollection(type) {
+    const sourceItems = (this.data[type] || []).map((item, originalIndex) => ({
+      ...item,
+      originalIndex,
+    }));
+    const grouped = {};
+
+    if (type === "receivables") {
+      this.syncReceivableContacts();
+      (this.data.receivableContacts || []).forEach((contact) => {
+        grouped[contact.name] = {
+          total: 0,
+          items: [],
+          phone: contact.phone || "",
+        };
+      });
+    }
+
+    sourceItems.forEach((item) => {
+      const name = item.name || item.student || "Desconocido";
+      if (!grouped[name]) {
+        grouped[name] = { total: 0, items: [], phone: "" };
+      }
+
+      grouped[name].items.push(item);
+
+      if (type === "receivables") {
+        grouped[name].phone = grouped[name].phone || this.getGroupPhone(name, type) || "";
+      } else if (!grouped[name].phone && item.phone) {
+        grouped[name].phone = item.phone;
+      }
+
+      if (!item.isNote) {
+        grouped[name].total += Number(type === "classes" ? item.hours : item.amount);
+      }
+    });
+
+    return grouped;
   },
 
   // --- RENDERERS ---
@@ -429,29 +1006,18 @@ const app = {
   },
 
     renderGenericList(container, type, title, tagClass, colorClass) { // colorClass added for dynamic coloring
-        let items = this.data[type];
-        
-        // Search Logic
         const searchTerm = (this.searchState && this.searchState[type]) || '';
+        const grouped = this.getGroupedCollection(type);
+        let groupEntries = Object.entries(grouped);
+
         if (searchTerm) {
             const lowerTerm = searchTerm.toLowerCase();
-            items = items.filter(item => {
-                const name = (item.name || item.student || '').toLowerCase();
-                const desc = (item.desc || '').toLowerCase();
-                return name.includes(lowerTerm) || desc.includes(lowerTerm);
+            groupEntries = groupEntries.filter(([name, group]) => {
+                const descriptionText = group.items.map((item) => item.desc || "").join(" ").toLowerCase();
+                const phone = (group.phone || "").toLowerCase();
+                return name.toLowerCase().includes(lowerTerm) || descriptionText.includes(lowerTerm) || phone.includes(lowerTerm);
             });
         }
-        
-        // Group by Name/Student
-        const grouped = {};
-        items.forEach((item, index) => {
-            const name = item.name || item.student || 'Desconocido';
-            if (!grouped[name]) grouped[name] = { total: 0, items: [] };
-            grouped[name].items.push({ ...item, originalIndex: index }); // Store original index for deletion
-            if(!item.isNote) {
-                 grouped[name].total += Number(type === 'classes' ? item.hours : item.amount);
-            }
-        });
 
         let html = `
             <div class="flex justify-between items-center gap-4 mb-6">
@@ -481,12 +1047,30 @@ const app = {
             <div class="flex flex-col space-y-4">
         `;
 
-        if (Object.keys(grouped).length === 0) {
+        if (groupEntries.length === 0) {
              html += `<div class="text-center py-20 text-gray-500 bg-gray-800/50 rounded-2xl border border-gray-700/50 border-dashed">No hay registros aún.</div>`;
         } else {
-            Object.keys(grouped).forEach(key => {
-                const group = grouped[key];
+            groupEntries.forEach(([key, group]) => {
                 const cleanId = key.replace(/[^a-zA-Z0-9]/g, '');
+                const escapedKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const showWhatsAppAction = type === 'receivables';
+                const showEditContactAction = type === 'receivables';
+                const debtItems = group.items.filter(item => !item.isNote);
+                const hasDebt = debtItems.length > 0;
+                const whatsappTitle = group.phone
+                    ? `Enviar reporte a ${group.phone}`
+                    : 'Agrega un numero de WhatsApp a esta persona';
+                const deleteAction = type === 'receivables'
+                    ? (hasDebt
+                        ? `app.confirmDeleteGroup('${type}', '${escapedKey}')`
+                        : `app.confirmDeleteReceivableContact('${escapedKey}')`)
+                    : `app.confirmDeleteGroup('${type}', '${escapedKey}')`;
+                const deleteTitle = type === 'receivables'
+                    ? (hasDebt ? 'Borrar deuda pendiente' : 'Borrar cliente')
+                    : 'Borrar historial completo';
+                const deleteIcon = type === 'receivables'
+                    ? (hasDebt ? 'fa-solid fa-fire' : 'fa-solid fa-user-xmark')
+                    : 'fa-solid fa-fire';
                 
                 html += `
                 <div class="bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden mb-4 shadow-lg shadow-black/20">
@@ -499,19 +1083,30 @@ const app = {
                             <div>
                                 <h3 class="text-lg font-bold text-white group-hover:text-brand-400 transition">${key}</h3>
                                 <p class="text-xs text-gray-400">${group.items.length} registro(s)</p>
+                                ${group.phone ? `<p class="text-xs text-brand-400 mt-1"><i class="fa-brands fa-whatsapp mr-1"></i>${group.phone}</p>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-4">
                             <span class="text-xl font-bold text-white mr-2">
                                 ${type === 'classes' ? group.total + ' hrs' : this.formatMoney(group.total)}
                             </span>
+                             ${showEditContactAction ? `
+                             <span onclick="event.stopPropagation(); app.openReceivableContactModal('${escapedKey}')" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-sky-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="Editar cliente">
+                                <i class="fa-solid fa-user-pen"></i>
+                             </span>
+                             ` : ''}
+                             ${showWhatsAppAction ? `
+                             <span onclick="event.stopPropagation(); app.sendWhatsAppReport('${escapedKey}', '${type}')" class="w-8 h-8 rounded-full ${(group.phone && hasDebt) ? 'bg-emerald-500/20 hover:bg-emerald-500' : 'bg-gray-700 hover:bg-gray-600'} flex items-center justify-center text-${(group.phone && hasDebt) ? 'emerald-300 hover:text-white' : 'gray-300 hover:text-white'} transition-colors mr-2 z-20" title="${hasDebt ? whatsappTitle : 'No hay deuda pendiente para enviar'}">
+                                <i class="fa-brands fa-whatsapp"></i>
+                             </span>
+                             ` : ''}
                              <!-- Copy Button -->
-                             <span onclick="event.stopPropagation(); app.copyGroupDetails('${key}', '${type}')" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-brand-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="Copiar Detalle">
+                             <span onclick="event.stopPropagation(); app.copyGroupDetails('${escapedKey}', '${type}')" class="w-8 h-8 rounded-full ${hasDebt ? 'bg-gray-700 hover:bg-brand-600 text-gray-300 hover:text-white' : 'bg-gray-700 text-gray-500'} flex items-center justify-center transition-colors mr-2 z-20" title="${hasDebt ? 'Copiar detalle' : 'No hay deuda pendiente para copiar'}">
                                 <i class="fa-regular fa-copy"></i>
                              </span>
                              <!-- Delete Group Button -->
-                             <span onclick="event.stopPropagation(); app.confirmDeleteGroup('${type}', '${key}')" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-rose-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="Borrar Historial Completo">
-                                <i class="fa-solid fa-fire"></i>
+                             <span onclick="event.stopPropagation(); ${deleteAction}" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-rose-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="${deleteTitle}">
+                                <i class="${deleteIcon}"></i>
                              </span>
                              <i id="icon-${cleanId}" class="fa-solid fa-chevron-down text-gray-400 transition-transform duration-300 ${this.currentAccordionState && this.currentAccordionState[cleanId] ? 'rotate-180' : ''}"></i>
                         </div>
@@ -574,9 +1169,9 @@ const app = {
                             <div class="p-4 mt-2 bg-gray-800/50 rounded-xl border border-dashed border-gray-700">
                                 <p class="text-xs text-brand-400 font-bold mb-2 uppercase tracking-wide">Agregar nuevo registro a ${key}</p>
                                 <div class="flex flex-col md:flex-row gap-2">
-                                     <input onkeyup="if(event.key === 'Enter') app.saveInlineItem('${type}', '${key}', '${cleanId}')" type="number" id="inline-amount-${cleanId}" placeholder="${type === 'classes' ? 'Horas' : 'Monto ($)'}" step="${type === 'classes' ? '0.5' : '0.01'}" class="w-32 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none font-bold">
-                                    <input onkeyup="if(event.key === 'Enter') app.saveInlineItem('${type}', '${key}', '${cleanId}')" type="text" id="inline-desc-${cleanId}" placeholder="Descripción..." class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
-                                    <button onclick="app.saveInlineItem('${type}', '${key}', '${cleanId}')" class="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-sm transition shadow-lg shadow-brand-500/20">
+                                     <input onkeyup="if(event.key === 'Enter') app.saveInlineItem('${type}', '${escapedKey}', '${cleanId}')" type="number" id="inline-amount-${cleanId}" placeholder="${type === 'classes' ? 'Horas' : 'Monto ($)'}" step="${type === 'classes' ? '0.5' : '0.01'}" class="w-32 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none font-bold">
+                                    <input onkeyup="if(event.key === 'Enter') app.saveInlineItem('${type}', '${escapedKey}', '${cleanId}')" type="text" id="inline-desc-${cleanId}" placeholder="Descripción..." class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-brand-500 outline-none">
+                                    <button onclick="app.saveInlineItem('${type}', '${escapedKey}', '${cleanId}')" class="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-sm transition shadow-lg shadow-brand-500/20">
                                         <i class="fa-solid fa-paper-plane"></i>
                                     </button>
                                 </div>
@@ -685,7 +1280,23 @@ const app = {
 
     let formHtml = "";
 
-    if (type === "receivables" || type === "payables") {
+    if (type === "receivable-contact") {
+      const contact = this.getReceivableContact(prefillName);
+      this.editingContactOriginalName = contact ? contact.name : prefillName;
+      title.textContent = "Editar Cliente";
+      formHtml = `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Nombre del cliente</label>
+                    <input type="text" id="input-contact-name" value="${contact?.name || prefillName || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. Jimmy">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">WhatsApp</label>
+                    <input type="text" id="input-contact-phone" value="${contact?.phone || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000">
+                    <p class="text-xs text-gray-500 mt-1">Puedes dejarlo vacio si todavia no tienes el numero.</p>
+                </div>
+            `;
+      saveBtn.onclick = () => this.saveReceivableContact();
+    } else if (type === "receivables" || type === "payables") {
       title.textContent =
         type === "receivables"
           ? "Registrar Cobro (Deuda ajena)"
@@ -699,6 +1310,13 @@ const app = {
                     <label class="block text-sm font-medium text-gray-400 mb-1">Monto ($)</label>
                     <input type="number" step="0.01" id="input-amount" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="0.00">
                 </div>
+                ${type === "receivables" ? `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">WhatsApp (opcional)</label>
+                    <input type="text" id="input-phone" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000 o 096 292 0000">
+                    <p class="text-xs text-gray-500 mt-1">Acepta formatos como <code>+593 00 000 0000</code>, <code>0962900000</code> o <code>096 292 0000</code>.</p>
+                </div>
+                ` : ''}
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-1">Descripción / Evidencia</label>
                     <textarea id="input-desc" rows="3" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Detalles del trabajo o deuda..."></textarea>
@@ -765,12 +1383,37 @@ const app = {
     body.innerHTML = formHtml;
   },
 
+  openReceivableContactModal(name) {
+    this.openModal("receivable-contact", name, { isEditing: true });
+  },
+
   closeModal() {
     const modal = document.getElementById("modal-container");
     modal.querySelector("div").classList.add("scale-95", "opacity-0");
     setTimeout(() => {
       modal.classList.add("hidden");
     }, 200);
+  },
+
+  saveReceivableContact() {
+    const oldName = this.sanitizeEntityName(this.editingContactOriginalName || "");
+    const newName = this.sanitizeEntityName(document.getElementById("input-contact-name")?.value || "");
+    const rawPhone = document.getElementById("input-contact-phone")?.value || "";
+    const normalizedPhone = this.normalizePhoneInput(rawPhone);
+
+    if (!newName) {
+      return this.showToast("El nombre del cliente es obligatorio", "error");
+    }
+
+    if (normalizedPhone === null) {
+      return this.showToast("Numero de WhatsApp invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
+    }
+
+    this.renameReceivableContact(oldName || newName, newName, normalizedPhone || "");
+    this.saveData();
+    this.closeModal();
+    this.navigate(this.currentView);
+    this.showToast("Cliente actualizado");
   },
 
   saveItem(type) {
@@ -780,17 +1423,28 @@ const app = {
     };
 
     if (type === "receivables" || type === "payables" || type === "savings") {
-      newItem.name = document.getElementById("input-name").value;
+      newItem.name = this.sanitizeEntityName(document.getElementById("input-name").value);
       newItem.amount = document.getElementById("input-amount").value;
       newItem.desc = document.getElementById("input-desc").value;
+      if (type === "receivables") {
+        const phoneInputValue = document.getElementById("input-phone")?.value || "";
+        const fallbackPhone = this.getGroupPhone(newItem.name, type) || "";
+        const normalizedPhone = this.normalizePhoneInput(phoneInputValue || fallbackPhone);
+        if (normalizedPhone === null) {
+          return this.showToast("Numero de WhatsApp invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
+        }
+        if (normalizedPhone) {
+          newItem.phone = normalizedPhone;
+        }
+      }
       if (!newItem.name || !newItem.amount)
-        return alert("Nombre y monto requeridos");
+        return this.showToast("Nombre y monto requeridos");
     } else if (type === "classes") {
       newItem.student = document.getElementById("input-student").value;
       newItem.hours = document.getElementById("input-hours").value;
       newItem.desc = document.getElementById("input-desc").value;
       if (!newItem.student || !newItem.hours)
-        return alert("Estudiante y horas requeridos");
+        return this.showToast("Estudiante y horas requeridos");
     } else if (type === "memberships") {
       newItem.name = document.getElementById("input-name").value;
       newItem.cost = document.getElementById("input-cost").value;
@@ -798,19 +1452,26 @@ const app = {
       newItem.nextPayment = document.getElementById("input-date").value; // Capture date
       newItem.active = true;
       if (!newItem.name || !newItem.cost)
-        return alert("Nombre y costo requeridos");
+        return this.showToast("Nombre y costo requeridos");
     }
 
     if (this.editingIndex != null) {
         // Update existing
+        const previousItem = this.data[type][this.editingIndex];
         newItem.id = this.data[type][this.editingIndex].id; // Keep ID
         newItem.date = this.data[type][this.editingIndex].date; // Keep original date
         this.data[type][this.editingIndex] = newItem;
+        if (type === "receivables") {
+          this.renameReceivableContact(previousItem.name, newItem.name, newItem.phone || "");
+        }
         this.showToast("Registro actualizado");
         this.editingIndex = null;
     } else {
         // Create new
         this.data[type].push(newItem);
+        if (type === "receivables") {
+          this.upsertReceivableContact(newItem.name, newItem.phone || "");
+        }
         this.showToast("Registro guardado correctamente");
     }
 
@@ -831,6 +1492,7 @@ const app = {
       setTimeout(() => {
           if(document.getElementById("input-name")) document.getElementById("input-name").value = item.name || item.student || '';
           if(document.getElementById("input-amount")) document.getElementById("input-amount").value = item.amount || '';
+          if(document.getElementById("input-phone")) document.getElementById("input-phone").value = item.phone || this.getGroupPhone(item.name || '', type) || '';
           if(document.getElementById("input-hours")) document.getElementById("input-hours").value = item.hours || '';
           if(document.getElementById("input-cost")) document.getElementById("input-cost").value = item.cost || '';
           if(document.getElementById("input-desc")) document.getElementById("input-desc").value = item.desc || '';
@@ -852,6 +1514,8 @@ const app = {
       });
 
       // Bind click event (removing previous listeners to avoid duplicates if any)
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Eliminar';
       confirmBtn.onclick = () => {
           this.executeDelete(type, index);
       };
@@ -867,8 +1531,13 @@ const app = {
       const confirmBtn = document.getElementById('confirm-delete-btn');
       
       // Update Text
-      modal.querySelector('h3').textContent = `¿Limpiar historial de ${name}?`;
-      modal.querySelector('p').textContent = `Se borrarán TODOS los registros de ${name}. No podrás deshacer esto.`;
+      if (type === 'receivables') {
+          modal.querySelector('h3').textContent = `¿Borrar deuda de ${name}?`;
+          modal.querySelector('p').textContent = `Se eliminarán solo los movimientos de deuda. El cliente y su WhatsApp se conservarán.`;
+      } else {
+          modal.querySelector('h3').textContent = `¿Limpiar historial de ${name}?`;
+          modal.querySelector('p').textContent = `Se borrarán TODOS los registros de ${name}. No podrás deshacer esto.`;
+      }
 
       modal.classList.remove('hidden');
       requestAnimationFrame(() => {
@@ -876,13 +1545,35 @@ const app = {
           content.classList.add('scale-100', 'opacity-100');
       });
 
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Eliminar';
       confirmBtn.onclick = () => {
           this.executeDeleteGroup(type, name);
       };
   },
 
+  confirmDeleteReceivableContact(name) {
+      const modal = document.getElementById('confirm-modal');
+      const content = document.getElementById('confirm-modal-content');
+      const confirmBtn = document.getElementById('confirm-delete-btn');
+
+      modal.querySelector('h3').textContent = `¿Borrar cliente ${name}?`;
+      modal.querySelector('p').textContent = `Se borrará la persona y su WhatsApp guardado. Esta acción no se puede deshacer.`;
+
+      modal.classList.remove('hidden');
+      requestAnimationFrame(() => {
+          content.classList.remove('scale-95', 'opacity-0');
+          content.classList.add('scale-100', 'opacity-100');
+      });
+
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Eliminar';
+      confirmBtn.onclick = () => {
+          this.executeDeleteReceivableContact(name);
+      };
+  },
+
   executeDeleteGroup(type, name) {
-      // Filter OUT items that belong to this name
       this.data[type] = this.data[type].filter(item => {
           const itemName = item.name || item.student || 'Desconocido';
           return itemName !== name;
@@ -891,12 +1582,36 @@ const app = {
       this.saveData();
       this.closeConfirmModal();
       this.navigate(this.currentView);
-      this.showToast(`Historial de ${name} eliminado`);
+      this.showToast(type === 'receivables' ? `Deuda de ${name} eliminada` : `Historial de ${name} eliminado`);
       
       // Restore default text
       setTimeout(() => {
         const modal = document.getElementById('confirm-modal');
         if(modal) {
+             modal.querySelector('h3').textContent = '¿Estás seguro?';
+             modal.querySelector('p').textContent = 'Esta acción eliminará el registro permanentemente.';
+        }
+      }, 500);
+  },
+
+  executeDeleteReceivableContact(name) {
+      const hasDebt = this.data.receivables.some(item => (item.name || 'Desconocido') === name && !item.isNote);
+      if (hasDebt) {
+          this.closeConfirmModal();
+          this.showToast(`No se puede borrar ${name} porque todavía tiene registros`, 'error');
+          return;
+      }
+
+      this.data.receivableContacts = (this.data.receivableContacts || []).filter(contact => contact.name !== name);
+      this.data.receivables = this.data.receivables.filter(item => (item.name || 'Desconocido') !== name);
+      this.saveData();
+      this.closeConfirmModal();
+      this.navigate(this.currentView);
+      this.showToast(`Cliente ${name} eliminado`);
+
+      setTimeout(() => {
+        const modal = document.getElementById('confirm-modal');
+        if (modal) {
              modal.querySelector('h3').textContent = '¿Estás seguro?';
              modal.querySelector('p').textContent = 'Esta acción eliminará el registro permanentemente.';
         }
@@ -916,26 +1631,11 @@ const app = {
   },
 
   copyGroupDetails(name, type) {
-      // Filter by name AND ensure it's not a note
-      const items = this.data[type].filter(i => ((i.name || i.student) === name) && !i.isNote);
-      if(!items.length) return;
-
-      const total = items.reduce((sum, i) => sum + Number(type === 'classes' ? i.hours : i.amount), 0);
-      const totalStr = type === 'classes' ? total + ' horas' : this.formatMoney(total);
-
-      let text = `*Persona: ${name}*\n`;
-      text += `--------------------------------\n`;
-      
-      items.forEach(i => {
-          const val = type === 'classes' ? i.hours + 'h' : this.formatMoney(i.amount);
-          const date = new Date(i.date).toLocaleDateString();
-          text += `• ${date} | ${val} | ${i.desc || 'Sin detalle'}\n`;
-      });
-      
-      text += `--------------------------------\n`;
-      text += `*TOTAL PENDIENTE: ${totalStr}*\n`;
-      text += `--------------------------------\n`;
-      text += `Generado por ControlPagos`;
+      const text = this.buildGroupDetailsText(name, type);
+      if(!text) {
+          this.showToast('No hay deuda pendiente para copiar', 'error');
+          return;
+      }
 
       navigator.clipboard.writeText(text).then(() => {
           this.showToast('Detalle copiado al portapapeles');
@@ -945,10 +1645,86 @@ const app = {
       });
   },
 
+   sendWhatsAppReport(name, type) {
+
+    const modal = document.getElementById('confirm-modal');
+    const content = document.getElementById('confirm-modal-content');
+    const confirmBtn = document.getElementById('confirm-delete-btn');
+
+
+
+      if (type !== 'receivables') {
+          this.showToast('El envio por WhatsApp esta disponible en "Por Cobrar"', 'error');
+          return;
+      }
+
+      const phone = this.getGroupPhone(name, type);
+      if (!phone) {
+          this.showToast('Agrega un numero de WhatsApp a esta persona para poder enviarle el reporte', 'error');
+          return;
+      }
+
+      if (!this.buildGroupDetailsText(name, type)) {
+          this.showToast('No hay deuda pendiente para enviar', 'error');
+          return;
+      }
+
+      if (this.whatsapp.status !== 'ready') {
+          this.openWhatsAppModal();
+          this.showToast('Conecta WhatsApp primero y luego vuelve a intentarlo', 'error');
+          return;
+      }
+
+      
+      //modal para confirmar el envio a whatsapp
+      modal.querySelector('h3').textContent = `Enviar reporte a ${name}`;
+      modal.querySelector('p').textContent = `¿Seguro que deseas enviar el reporte de ${name} a ${phone}?`;
+        
+      
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Enviar';
+
+
+      modal.classList.remove('hidden');
+      requestAnimationFrame(() => {
+          content.classList.remove('scale-95', 'opacity-0');
+          content.classList.add('scale-100', 'opacity-100');
+      });
+          
+
+    confirmBtn.onclick = async () => { 
+      try {
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = 'Enviando...'; 
+
+          const response = await fetch('/api/whatsapp/send-report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name, type })
+          });
+          
+          const result = await response.json();
+
+          if (!response.ok) {
+              throw new Error(result.error || result.detail || 'No se pudo enviar el reporte');
+          }
+          
+          this.closeConfirmModal();
+          this.showToast(`Reporte enviado a ${phone}`);
+          
+      } catch (error) {
+          console.error('Error enviando reporte por WhatsApp', error);
+          this.showToast(error.message || 'No se pudo enviar el reporte', 'error');
+        
+      } finally {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Eliminar';
+      }
+    };
+  },
+
   executeDelete(type, index) {
-      // Preserve accordion state logic
-      // We need to find which accordion this item belongs to.
-      // Since 'index' is the global index in the array, let's find the item name
+    
       const item = this.data[type][index];
       let cleanId = null;
       if (item) {
@@ -959,8 +1735,6 @@ const app = {
       this.data[type].splice(index, 1);
       this.saveData();
 
-      // Keep accordion open if it still has items, or just close it if empty (logic handles itself mostly)
-      // But we just want to ensure we don't force-close it.
       if (cleanId) {
           this.currentAccordionState = this.currentAccordionState || {};
           this.currentAccordionState[cleanId] = true;
@@ -977,6 +1751,50 @@ const app = {
       style: "currency",
       currency: "USD",
     }).format(amount);
+  },
+
+  normalizePhoneInput(value) {
+      const rawValue = String(value || "").trim();
+      if (!rawValue) {
+          return "";
+      }
+
+      const digits = rawValue.replace(/\D/g, "");
+      let normalizedDigits = "";
+
+      if (digits.startsWith("593") && digits.length === 12) {
+          normalizedDigits = digits;
+      } else if (digits.startsWith("0") && digits.length === 10) {
+          normalizedDigits = `593${digits.slice(1)}`;
+      } else if (digits.length === 9 && digits.startsWith("9")) {
+          normalizedDigits = `593${digits}`;
+      } else {
+          return null;
+      }
+
+      return `+${normalizedDigits.slice(0, 3)} ${normalizedDigits.slice(3, 5)} ${normalizedDigits.slice(5, 8)} ${normalizedDigits.slice(8)}`;
+  },
+
+  getGroupPhone(name, type) {
+      if (type === 'receivables') {
+          const contact = this.getReceivableContact(name);
+          if (contact && contact.phone) {
+              return contact.phone;
+          }
+      }
+
+      const groupItems = (this.data[type] || []).filter(item => (item.name || item.student || 'Desconocido') === name);
+      const itemWithPhone = groupItems.find(item => item.phone);
+      return itemWithPhone ? itemWithPhone.phone : '';
+  },
+
+  buildGroupDetailsText(name, type) {
+      const items = this.data[type].filter(i => ((i.name || i.student) === name) && !i.isNote);
+      if (!items.length || !this.reportFormatter) return "";
+
+      return this.reportFormatter.buildGroupReportMessage(name, type, items, {
+          locale: 'es-EC'
+      });
   },
 
   saveInlineItem(type, name, cleanId) {
@@ -1004,6 +1822,13 @@ const app = {
       } else {
           newItem.name = name; // Use existing name
           newItem.amount = amount;
+          if (type === 'receivables') {
+              const existingPhone = this.getGroupPhone(name, type);
+              if (existingPhone) {
+                  newItem.phone = existingPhone;
+              }
+              this.upsertReceivableContact(name, existingPhone || "");
+          }
       }
 
       this.data[type].push(newItem);

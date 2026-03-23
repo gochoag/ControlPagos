@@ -146,10 +146,40 @@
                 <span>Restaurar</span>
                 <input type="file" class="hidden" onchange="app.restoreBackup(this)" accept=".json">
             </label>
-            <button onclick="app.subirDbADrive()" class="w-full flex items-center space-x-3 px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm group">
-              <i class="fa-brands fa-google-drive w-5 group-hover:scale-110 transition-transform"></i>
-              <span>Subir db.json a Drive</span>
+            <div class="px-4">
+              <button
+                id="drive-menu-btn"
+                onclick="toggleDriveMenu()"
+                class="w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm group"
+              >
+                <span class="flex items-center space-x-3">
+                  <i class="fa-brands fa-google-drive w-5 group-hover:scale-110 transition-transform"></i>
+                  <span>Google Drive</span>
+                </span>
+                <i id="drive-chevron" class="fa-solid fa-chevron-down text-xs transition-transform"></i>
+              </button>
+              <div id="drive-actions" class="hidden mt-2 ml-8 space-y-1">
+                <button onclick="app.subirDbADrive(); app.closeDriveMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
+                  Subir a Drive
+                </button>
+                <button onclick="app.restaurarDbDesdeDrive(); app.closeDriveMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
+                  Restaurar desde Drive
+                </button>
+              </div>
+            </div>
+        </div>
+
+        <div class="px-4 mb-2 mt-4 border-t border-gray-700/30 pt-4">
+          <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">WhatsApp</p>
+          <div class="px-4">
+            <button
+              id="whatsapp-action-btn"
+              onclick="app.openWhatsAppModal()"
+              class="w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition"
+            >
+              Conectar
             </button>
+          </div>
         </div>
 
         <div class="p-4 border-t border-gray-700/50">
@@ -347,6 +377,57 @@
       </div>
     </div>
 
+    <!-- WhatsApp Modal -->
+    <div
+      id="whatsapp-modal"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[55] hidden flex items-center justify-center p-4 transition-opacity duration-300"
+    >
+      <div
+        id="whatsapp-modal-content"
+        class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md transform scale-95 opacity-0 transition-all duration-300 overflow-hidden"
+      >
+        <div class="flex justify-between items-center p-5 border-b border-gray-700/50 bg-gray-800/70">
+          <div>
+            <h3 class="text-xl font-semibold text-white">Conectar WhatsApp</h3>
+            <p class="text-sm text-gray-400 mt-1">Escanea este QR con tu WhatsApp.</p>
+          </div>
+          <button
+            onclick="app.closeWhatsAppModal()"
+            class="text-gray-400 hover:text-white transition-colors"
+          >
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="rounded-2xl bg-white p-4 min-h-[280px] flex items-center justify-center">
+            <img id="whatsapp-qr-image" alt="QR de WhatsApp" class="max-w-full h-auto hidden" />
+            <div id="whatsapp-qr-placeholder" class="text-center text-gray-700">
+              <i class="fa-brands fa-whatsapp text-5xl text-emerald-500 mb-3"></i>
+              <p id="whatsapp-qr-message" class="text-sm font-medium">Esperando QR...</p>
+            </div>
+          </div>
+          <p id="whatsapp-qr-status" class="text-sm text-gray-400 text-center">
+            Cuando el cliente este listo, el QR aparecera aqui.
+          </p>
+        </div>
+        <div class="p-5 border-t border-gray-700/50 bg-gray-800/70 flex justify-end space-x-3">
+          <button
+            id="whatsapp-modal-action-btn"
+            onclick="app.handleWhatsAppModalAction()"
+            class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors"
+          >
+            Regenerar QR
+          </button>
+          <button
+            onclick="app.closeWhatsAppModal()"
+            class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Notification -->
     <div
       id="toast"
@@ -361,6 +442,7 @@
     </div>
 
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="js/reportFormatter.js"></script>
     <script src="js/app.js"></script>
     <script>
       function toggleMobileMenu() {
@@ -381,6 +463,12 @@
         chevron.style.transform = isHidden ? "rotate(180deg)" : "";
       }
 
+      function toggleDriveMenu() {
+        if (window.app && typeof window.app.toggleDriveMenu === "function") {
+          window.app.toggleDriveMenu();
+        }
+      }
+
       // Close theme dropdown when clicking outside
       document.addEventListener("click", function (e) {
         const btn = document.getElementById("theme-dropdown-btn");
@@ -389,6 +477,14 @@
         if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
           dropdown.classList.add("hidden");
           document.getElementById("theme-chevron").style.transform = "";
+        }
+
+        const driveBtn = document.getElementById("drive-menu-btn");
+        const driveMenu = document.getElementById("drive-actions");
+        if (driveBtn && driveMenu && !driveBtn.contains(e.target) && !driveMenu.contains(e.target)) {
+          if (window.app && typeof window.app.closeDriveMenu === "function") {
+            window.app.closeDriveMenu();
+          }
         }
       });
     </script>
