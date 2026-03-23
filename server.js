@@ -25,10 +25,6 @@ let whatsappInitPromise = null;
 let qrExpiryTimer = null;
 let authReadyTimer = null;
 let restartInProgress = false;
-let lastRecoverableWhatsappLog = {
-    message: '',
-    at: 0,
-};
 const whatsappState = {
     status: 'idle',
     qr: '',
@@ -469,21 +465,6 @@ const isRecoverableWhatsAppError = (error) => {
 const handleRecoverableWhatsAppError = (error) => {
     if (!isRecoverableWhatsAppError(error)) {
         return false;
-    }
-
-    const message = error && error.message ? error.message : String(error || '');
-    const now = Date.now();
-    const shouldLog = !restartInProgress && (
-        lastRecoverableWhatsappLog.message !== message
-        || (now - lastRecoverableWhatsappLog.at) > 5000
-    );
-
-    if (shouldLog) {
-        console.warn('WhatsApp se reiniciara tras un error recuperable:', message);
-        lastRecoverableWhatsappLog = {
-            message,
-            at: now,
-        };
     }
 
     setWhatsappState('restarting', {
