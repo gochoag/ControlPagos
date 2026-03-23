@@ -120,15 +120,26 @@ const getChromeExecutablePath = () => {
     return CHROME_CANDIDATES.find((candidate) => candidate && fs.existsSync(candidate)) || undefined;
 };
 
-const restartWhatsAppAsync = async (reason = '') => {
+const restartWhatsAppAsync = async (reason = '', options = {}) => {
     if (restartInProgress) {
         return;
     }
+
+    const {
+        clearCache = false,
+        clearSession = false,
+    } = options;
 
     restartInProgress = true;
 
     try {
         await destroyWhatsappClient();
+        if (clearSession) {
+            removeWhatsappSessionFiles();
+        }
+        if (clearCache || clearSession) {
+            removeWhatsappCacheFiles();
+        }
         setWhatsappState('initializing', {
             qr: '',
             qrDataUrl: '',
@@ -160,7 +171,9 @@ const scheduleQrExpiry = (qrGeneratedAt) => {
                 qrExpiresAt: null,
                 lastError: 'El QR vencio antes de ser escaneado. Generando uno nuevo...',
             });
-            restartWhatsAppAsync('El QR anterior vencio y se esta generando uno nuevo.');
+            restartWhatsAppAsync('El QR anterior vencio y se esta generando uno nuevo.', {
+                clearCache: true,
+            });
         }
     }, QR_TTL_MS);
 };
@@ -173,7 +186,9 @@ const scheduleAuthReadyTimeout = () => {
             setWhatsappState('restarting', {
                 lastError: 'La vinculacion tardo demasiado. Reiniciando la sesion de WhatsApp...',
             });
-            restartWhatsAppAsync('La vinculacion se quedo cargando demasiado tiempo.');
+            restartWhatsAppAsync('La vinculacion se quedo cargando demasiado tiempo.', {
+                clearCache: true,
+            });
         }
     }, AUTH_READY_TIMEOUT_MS);
 };
@@ -243,6 +258,10 @@ const removeWhatsappSessionFiles = () => {
     fs.rmSync(WHATSAPP_AUTH_PATH, { recursive: true, force: true });
 };
 
+const removeWhatsappCacheFiles = () => {
+    fs.rmSync(WHATSAPP_CACHE_PATH, { recursive: true, force: true });
+};
+
 const destroyWhatsappClient = async () => {
     clearWhatsappTimers();
 
@@ -274,6 +293,7 @@ const disconnectWhatsAppAsync = async () => {
 
     await destroyWhatsappClient();
     removeWhatsappSessionFiles();
+    removeWhatsappCacheFiles();
 
     setWhatsappState('idle', {
         qr: '',
@@ -376,7 +396,10 @@ const initializeWhatsApp = () => {
         });
 
         setTimeout(() => {
-            restartWhatsAppAsync('La autenticacion fallo y se esta generando una nueva sesion.');
+            restartWhatsAppAsync('La autenticacion fallo y se esta generando una nueva sesion.', {
+                clearCache: true,
+                clearSession: true,
+            });
         }, 1500);
     });
 
@@ -392,11 +415,30 @@ const initializeWhatsApp = () => {
         });
 
         setTimeout(() => {
-            restartWhatsAppAsync('WhatsApp se desconecto y se esta reintentando la conexion.');
+            restartWhatsAppAsync('WhatsApp se desconecto y se esta reintentando la conexion.', {
+                clearCache: true,
+            });
         }, 1500);
     });
 
     whatsappInitPromise = whatsappClient.initialize().catch(async (error) => {
+        await destroyWhatsappClient();
+
+        if (isRecoverableWhatsAppError(error)) {
+            setWhatsappState('restarting', {
+                qr: '',
+                qrDataUrl: '',
+                qrGeneratedAt: null,
+                qrExpiresAt: null,
+                info: null,
+                lastError: 'WhatsApp se reiniciara tras un error interno temporal.',
+            });
+            restartWhatsAppAsync('Se reinicio WhatsApp tras un error interno temporal.', {
+                clearCache: true,
+            });
+            return;
+        }
+
         setWhatsappState('error', {
             qr: '',
             qrDataUrl: '',
@@ -405,12 +447,49 @@ const initializeWhatsApp = () => {
             info: null,
             lastError: error.message,
         });
-        await destroyWhatsappClient();
         throw error;
     });
 
     return whatsappInitPromise;
 };
+
+const isRecoverableWhatsAppError = (error) => {
+    const message = error && error.message ? error.message : String(error || '');
+    return message.includes('Execution context was destroyed')
+        || message.includes('Cannot find context with specified id')
+        || message.includes('Navigating frame was detached');
+};
+
+const handleRecoverableWhatsAppError = (error) => {
+    if (!isRecoverableWhatsAppError(error)) {
+        return false;
+    }
+
+    console.warn('WhatsApp fallo de forma recuperable:', error.message || error);
+    setWhatsappState('restarting', {
+        lastError: 'WhatsApp se reiniciara tras un error interno temporal.',
+    });
+    restartWhatsAppAsync('Se reinicio WhatsApp tras un error interno temporal.', {
+        clearCache: true,
+    });
+    return true;
+};
+
+process.on('unhandledRejection', (reason) => {
+    if (handleRecoverableWhatsAppError(reason)) {
+        return;
+    }
+
+    console.error('Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    if (handleRecoverableWhatsAppError(error)) {
+        return;
+    }
+
+    console.error('Uncaught exception:', error);
+});
 
 // Routes
 app.get('/api/data', (req, res) => {

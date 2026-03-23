@@ -94,6 +94,15 @@ const app = {
         });
     },
 
+    getFriendlyNetworkError(error, fallback = 'No se pudo completar la solicitud') {
+        const message = error && error.message ? error.message : String(error || '');
+        if (/failed to fetch/i.test(message)) {
+            return 'No se pudo conectar con el servidor. Revisa si la consola de Node sigue abierta.';
+        }
+
+        return message || fallback;
+    },
+
     async initWhatsApp() {
         await this.refreshWhatsAppStatus();
         this.startWhatsAppPolling();
@@ -133,7 +142,7 @@ const app = {
                 qrGeneratedAt: null,
                 qrExpiresAt: null,
                 info: null,
-                lastError: error.message,
+                lastError: this.getFriendlyNetworkError(error, 'No se pudo consultar el estado de WhatsApp'),
             };
         }
 
@@ -320,6 +329,7 @@ const app = {
                 await this.refreshWhatsAppStatus();
             } catch (error) {
                 console.error('No se pudo pedir un QR nuevo', error);
+                this.showToast(this.getFriendlyNetworkError(error, 'No se pudo pedir un QR nuevo'), 'error');
             }
         }
     },
@@ -374,7 +384,7 @@ const app = {
         } catch (error) {
             console.error('Error reiniciando WhatsApp', error);
             if (!silent) {
-                this.showToast(error.message || 'No se pudo reiniciar WhatsApp', 'error');
+                this.showToast(this.getFriendlyNetworkError(error, 'No se pudo reiniciar WhatsApp'), 'error');
             }
         } finally {
             this.whatsappActionInFlight = false;
@@ -401,7 +411,7 @@ const app = {
             await this.refreshWhatsAppStatus();
         } catch (error) {
             console.error('Error desconectando WhatsApp', error);
-            this.showToast(error.message || 'No se pudo desconectar WhatsApp', 'error');
+            this.showToast(this.getFriendlyNetworkError(error, 'No se pudo desconectar WhatsApp'), 'error');
         } finally {
             this.whatsappActionInFlight = false;
         }
