@@ -1516,8 +1516,7 @@ const app = {
       });
 
       // Bind click event (removing previous listeners to avoid duplicates if any)
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Eliminar';
+      this.setConfirmButtonVariant('danger', 'Eliminar');
       confirmBtn.onclick = () => {
           this.executeDelete(type, index);
       };
@@ -1547,8 +1546,7 @@ const app = {
           content.classList.add('scale-100', 'opacity-100');
       });
 
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Eliminar';
+      this.setConfirmButtonVariant('danger', 'Eliminar');
       confirmBtn.onclick = () => {
           this.executeDeleteGroup(type, name);
       };
@@ -1568,8 +1566,7 @@ const app = {
           content.classList.add('scale-100', 'opacity-100');
       });
 
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Eliminar';
+      this.setConfirmButtonVariant('danger', 'Eliminar');
       confirmBtn.onclick = () => {
           this.executeDeleteReceivableContact(name);
       };
@@ -1585,15 +1582,6 @@ const app = {
       this.closeConfirmModal();
       this.navigate(this.currentView);
       this.showToast(type === 'receivables' ? `Deuda de ${name} eliminada` : `Historial de ${name} eliminado`);
-      
-      // Restore default text
-      setTimeout(() => {
-        const modal = document.getElementById('confirm-modal');
-        if(modal) {
-             modal.querySelector('h3').textContent = '¿Estás seguro?';
-             modal.querySelector('p').textContent = 'Esta acción eliminará el registro permanentemente.';
-        }
-      }, 500);
   },
 
   executeDeleteReceivableContact(name) {
@@ -1610,14 +1598,37 @@ const app = {
       this.closeConfirmModal();
       this.navigate(this.currentView);
       this.showToast(`Cliente ${name} eliminado`);
+  },
 
-      setTimeout(() => {
-        const modal = document.getElementById('confirm-modal');
-        if (modal) {
-             modal.querySelector('h3').textContent = '¿Estás seguro?';
-             modal.querySelector('p').textContent = 'Esta acción eliminará el registro permanentemente.';
-        }
-      }, 500);
+  setConfirmButtonVariant(variant = 'danger', label = 'Eliminar', disabled = false) {
+      const confirmBtn = document.getElementById('confirm-delete-btn');
+      if (!confirmBtn) {
+          return;
+      }
+
+      confirmBtn.disabled = disabled;
+      confirmBtn.textContent = label;
+
+      const baseClass = 'px-5 py-2.5 rounded-xl text-white font-medium transition disabled:opacity-70 disabled:cursor-not-allowed';
+      if (variant === 'success') {
+          confirmBtn.className = `${baseClass} bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-500/20`;
+          return;
+      }
+
+      confirmBtn.className = `${baseClass} bg-rose-600 hover:bg-rose-500 shadow-lg shadow-rose-500/20`;
+  },
+
+  resetConfirmModalState() {
+      const modal = document.getElementById('confirm-modal');
+      const confirmBtn = document.getElementById('confirm-delete-btn');
+      if (!modal || !confirmBtn) {
+          return;
+      }
+
+      modal.querySelector('h3').textContent = '¿Estás seguro?';
+      modal.querySelector('p').textContent = 'Esta acción eliminará el registro permanentemente.';
+      this.setConfirmButtonVariant('danger', 'Eliminar');
+      confirmBtn.onclick = null;
   },
 
   closeConfirmModal() {
@@ -1629,6 +1640,7 @@ const app = {
       
       setTimeout(() => {
           modal.classList.add('hidden');
+          this.resetConfirmModalState();
       }, 300);
   },
 
@@ -1683,8 +1695,7 @@ const app = {
       modal.querySelector('p').textContent = `¿Seguro que deseas enviar el reporte de ${name} a ${phone}?`;
         
       
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Enviar';
+      this.setConfirmButtonVariant('success', 'Enviar');
 
 
       modal.classList.remove('hidden');
@@ -1695,9 +1706,9 @@ const app = {
           
 
     confirmBtn.onclick = async () => { 
+      let sentSuccessfully = false;
       try {
-          confirmBtn.disabled = true;
-          confirmBtn.textContent = 'Enviando...'; 
+          this.setConfirmButtonVariant('success', 'Enviando...', true);
 
           const response = await fetch('/api/whatsapp/send-report', {
               method: 'POST',
@@ -1711,6 +1722,7 @@ const app = {
               throw new Error(result.error || result.detail || 'No se pudo enviar el reporte');
           }
           
+          sentSuccessfully = true;
           this.closeConfirmModal();
           this.showToast(`Reporte enviado a ${phone}`);
           
@@ -1719,8 +1731,9 @@ const app = {
           this.showToast(error.message || 'No se pudo enviar el reporte', 'error');
         
       } finally {
-          confirmBtn.disabled = false;
-          confirmBtn.textContent = 'Eliminar';
+          if (!sentSuccessfully) {
+              this.setConfirmButtonVariant('success', 'Enviar');
+          }
       }
     };
   },
