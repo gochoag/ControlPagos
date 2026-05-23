@@ -8,24 +8,16 @@ echo.
 
 cd /d "%~dp0"
 
-where node >nul 2>nul
+where bun >nul 2>nul
 if errorlevel 1 (
-  echo ERROR: Node.js no esta instalado o no esta en el PATH.
-  echo Instala Node.js y vuelve a intentar.
-  pause
-  exit /b 1
-)
-
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo ERROR: npm no esta disponible en el PATH.
-  echo Reinstala Node.js o abre una nueva consola despues de instalarlo.
+  echo ERROR: bun no esta disponible en el PATH.
+  echo Instala Bun o abre una nueva consola despues de instalarlo.
   pause
   exit /b 1
 )
 
 echo Instalando dependencias...
-call npm install
+call bun install
 if errorlevel 1 (
   echo.
   echo ERROR: Fallo la instalacion de dependencias.
@@ -35,7 +27,7 @@ if errorlevel 1 (
 
 echo.
 echo Iniciando servidor...
-call npm start
+call bun start
 
 echo.
 echo ControlPagos se ha detenido o ocurrio un error.

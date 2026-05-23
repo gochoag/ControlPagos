@@ -32,6 +32,7 @@ const app = {
   currentThemeIndex: 0,
   reportFormatter: window.ControlPagosReportFormatter,
   driveMenuOpen: false,
+    backupMenuOpen: false,
 
 
     async init() {
@@ -633,6 +634,30 @@ const app = {
         this.driveMenuOpen = false;
         const menu = document.getElementById('drive-actions');
         const chevron = document.getElementById('drive-chevron');
+        if (menu) {
+            menu.classList.add('hidden');
+        }
+        if (chevron) {
+            chevron.style.transform = '';
+        }
+    },
+
+    toggleBackupMenu() {
+        this.backupMenuOpen = !this.backupMenuOpen;
+        const menu = document.getElementById('backup-actions');
+        const chevron = document.getElementById('backup-chevron');
+        if (menu) {
+            menu.classList.toggle('hidden', !this.backupMenuOpen);
+        }
+        if (chevron) {
+            chevron.style.transform = this.backupMenuOpen ? 'rotate(180deg)' : '';
+        }
+    },
+
+    closeBackupMenu() {
+        this.backupMenuOpen = false;
+        const menu = document.getElementById('backup-actions');
+        const chevron = document.getElementById('backup-chevron');
         if (menu) {
             menu.classList.add('hidden');
         }

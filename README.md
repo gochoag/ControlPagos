@@ -7,13 +7,13 @@ Aplicación simple para gestión de finanzas personales (Cuentas por cobrar, por
 1.  **Instalar dependencias** (solo la primera vez):
 
     ```bash
-    npm install
+    bun install
     ```
 
 2.  **Ejecutar**:
 
     - Dale doble clic al archivo `iniciar.bat`.
-    - O ejecuta en la terminal: `npm start`
+    - O ejecuta en la terminal: `bun start`
 
 3.  **Usar**:
     - Se abrirá automáticamente en tu navegador.
