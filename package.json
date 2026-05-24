@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "bun test",
     "start": "bun server.js"
   },
   "repository": {
@@ -19,9 +19,7 @@
   "homepage": "https://github.com/gochoag/ControlPagos#readme",
   "description": "",
   "dependencies": {
-    "cors": "^2.8.5",
     "dotenv": "^16.6.1",
-    "express": "^5.2.1",
     "qrcode": "^1.5.4",
     "whatsapp-web.js": "^1.34.6"
   }

@@ -27,7 +27,7 @@ if errorlevel 1 (
 
 echo.
 echo Iniciando servidor...
-call bun start
+call bun server.js
 
 echo.
 echo ControlPagos se ha detenido o ocurrio un error.

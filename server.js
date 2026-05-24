@@ -1,14 +1,12 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const { buildGroupReportMessage } = require('./js/reportFormatter');
 
-const app = express();
-const PORT = 4343;
+const REQUESTED_PORT = Number(process.env.PORT || 4343);
+const MAX_PORT_ATTEMPTS = 10;
 const DB_FILE = path.join(__dirname, 'db.json');
 const WHATSAPP_AUTH_PATH = path.join(__dirname, '.wwebjs_auth');
 const WHATSAPP_CACHE_PATH = path.join(__dirname, '.wwebjs_cache');
@@ -25,6 +23,7 @@ let whatsappInitPromise = null;
 let qrExpiryTimer = null;
 let authReadyTimer = null;
 let restartInProgress = false;
+let shutdownInProgress = false;
 const whatsappState = {
     status: 'idle',
     qr: '',
@@ -36,10 +35,73 @@ const whatsappState = {
     lastEventAt: null,
 };
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname)); // Serve static files (HTML, CSS, JS)
+const CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
+const jsonResponse = (data, status = 200) => {
+    return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+            ...CORS_HEADERS,
+            'Content-Type': 'application/json; charset=utf-8',
+        },
+    });
+};
+
+const errorResponse = (error, status = 500, detail = '') => {
+    return jsonResponse(detail ? { error, detail } : { error }, status);
+};
+
+const noContentResponse = () => {
+    return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+    });
+};
+
+const readRequestJson = async (request) => {
+    try {
+        return await request.json();
+    } catch {
+        throw new Error('Invalid JSON body');
+    }
+};
+
+const resolveStaticFilePath = (pathname) => {
+    const requestedPath = pathname === '/'
+        ? 'index.html'
+        : pathname.replace(/^\/+/u, '');
+    const normalizedPath = path.normalize(requestedPath);
+
+    if (!normalizedPath || normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
+        return null;
+    }
+
+    return path.join(__dirname, normalizedPath);
+};
+
+const serveStaticFile = async (pathname) => {
+    const filePath = resolveStaticFilePath(pathname);
+    if (!filePath || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+        return null;
+    }
+
+    const file = Bun.file(filePath);
+    const headers = {
+        ...CORS_HEADERS,
+    };
+
+    if (file.type) {
+        headers['Content-Type'] = file.type;
+    }
+
+    return new Response(file, {
+        headers,
+    });
+};
 
 const createEmptyData = () => ({
     receivables: [],
@@ -476,6 +538,35 @@ const handleRecoverableWhatsAppError = (error) => {
     return true;
 };
 
+const shutdownServerAsync = async (signal = '') => {
+    if (shutdownInProgress) {
+        return;
+    }
+
+    shutdownInProgress = true;
+
+    if (signal) {
+        console.log(`\nCerrando servidor por ${signal} y limpiando Puppeteer...`);
+    } else {
+        console.log('\nCerrando servidor y limpiando Puppeteer...');
+    }
+
+    try {
+        await destroyWhatsappClient();
+        console.log('WhatsApp cerrado limpiamente.');
+    } catch (error) {
+        console.error('Error al cerrar WhatsApp:', error.message);
+    }
+
+    try {
+        server.stop(true);
+    } catch (error) {
+        console.error('Error al detener el servidor HTTP:', error.message);
+    }
+
+    process.exit(0);
+};
+
 process.on('unhandledRejection', (reason) => {
     if (handleRecoverableWhatsAppError(reason)) {
         return;
@@ -492,262 +583,329 @@ process.on('uncaughtException', (error) => {
     console.error('Uncaught exception:', error);
 });
 
-// Routes
-app.get('/api/data', (req, res) => {
-    try {
-        const data = readDB();
-        res.json(data);
-    } catch (err) {
-        res.status(500).json({ error: 'Error reading database' });
+const handleRequest = async (request) => {
+    const url = new URL(request.url);
+    const { pathname } = url;
+
+    if (request.method === 'OPTIONS') {
+        return noContentResponse();
     }
-});
 
-app.post('/api/data', (req, res) => {
-    try {
-        writeDB(req.body);
-        res.json({ success: true, message: 'Saved successfully' });
-    } catch (err) {
-        res.status(500).json({ error: 'Error writing database' });
+    if (request.method === 'GET' && pathname === '/api/data') {
+        try {
+            return jsonResponse(readDB());
+        } catch {
+            return errorResponse('Error reading database');
+        }
     }
-});
 
-app.get('/api/config', (req, res) => {
-    res.json({
-        googleClientId: process.env.ID_CLIENTE || '',
-        googleDriveFolderId: process.env.GDRIVE_FOLDER_ID || '',
-    });
-});
+    if (request.method === 'POST' && pathname === '/api/data') {
+        try {
+            const body = await readRequestJson(request);
+            writeDB(body);
+            return jsonResponse({ success: true, message: 'Saved successfully' });
+        } catch (error) {
+            if (error.message === 'Invalid JSON body') {
+                return errorResponse(error.message, 400);
+            }
 
-app.get('/api/whatsapp/status', (req, res) => {
-    res.json({
-        success: true,
-        status: whatsappState.status,
-        qrReady: Boolean(whatsappState.qrDataUrl),
-        qrDataUrl: whatsappState.qrDataUrl,
-        qrGeneratedAt: whatsappState.qrGeneratedAt,
-        qrExpiresAt: whatsappState.qrExpiresAt,
-        info: whatsappState.info,
-        lastError: whatsappState.lastError,
-        lastEventAt: whatsappState.lastEventAt,
-    });
-});
+            return errorResponse('Error writing database');
+        }
+    }
 
-app.post('/api/whatsapp/init', (req, res) => {
-    initializeWhatsApp().catch((error) => {
-        setWhatsappState('error', {
-            lastError: error.message,
+    if (request.method === 'GET' && pathname === '/api/config') {
+        return jsonResponse({
+            googleClientId: process.env.ID_CLIENTE || '',
+            googleDriveFolderId: process.env.GDRIVE_FOLDER_ID || '',
         });
-    });
+    }
 
-    res.json({
-        success: true,
-        status: whatsappState.status,
-    });
-});
+    if (request.method === 'GET' && pathname === '/api/whatsapp/status') {
+        return jsonResponse({
+            success: true,
+            status: whatsappState.status,
+            qrReady: Boolean(whatsappState.qrDataUrl),
+            qrDataUrl: whatsappState.qrDataUrl,
+            qrGeneratedAt: whatsappState.qrGeneratedAt,
+            qrExpiresAt: whatsappState.qrExpiresAt,
+            info: whatsappState.info,
+            lastError: whatsappState.lastError,
+            lastEventAt: whatsappState.lastEventAt,
+        });
+    }
 
-app.post('/api/whatsapp/restart', async (req, res) => {
-    try {
-        restartWhatsAppAsync('Reiniciando manualmente la sesion de WhatsApp.');
-        res.json({
+    if (request.method === 'POST' && pathname === '/api/whatsapp/init') {
+        initializeWhatsApp().catch((error) => {
+            setWhatsappState('error', {
+                lastError: error.message,
+            });
+        });
+
+        return jsonResponse({
             success: true,
             status: whatsappState.status,
         });
-    } catch (error) {
-        res.status(500).json({
-            error: 'No se pudo reiniciar WhatsApp',
-            detail: error.message,
-        });
     }
-});
 
-app.post('/api/whatsapp/disconnect', async (req, res) => {
-    try {
-        await disconnectWhatsAppAsync();
-        res.json({
-            success: true,
-            status: whatsappState.status,
-        });
-    } catch (error) {
-        res.status(500).json({
-            error: 'No se pudo desconectar WhatsApp',
-            detail: error.message,
-        });
-    }
-});
-
-app.post('/api/whatsapp/send-report', async (req, res) => {
-    try {
-        const { name, type } = req.body || {};
-        const validTypes = ['receivables', 'payables', 'classes', 'savings'];
-        const data = readDB();
-
-        if (!name || !validTypes.includes(type)) {
-            return res.status(400).json({ error: 'Faltan datos para enviar el reporte' });
-        }
-
-        if (!whatsappClient || whatsappState.status !== 'ready') {
-            return res.status(409).json({ error: 'WhatsApp no esta listo todavia' });
-        }
-
-        const items = Array.isArray(data[type])
-            ? data[type].filter((item) => (item.name || item.student || 'Desconocido') === name)
-            : [];
-        if (!items.length) {
-            return res.status(404).json({ error: 'No se encontraron registros para esa persona' });
-        }
-
-        const storedPhone = getGroupPhone(data, name, items);
-        const normalizedPhone = normalizeWhatsappNumber(storedPhone);
-
-        if (!normalizedPhone) {
-            return res.status(400).json({ error: 'La persona no tiene un numero de WhatsApp valido guardado' });
-        }
-
-        const message = buildGroupReportMessage(name, type, items, {
-            locale: 'es-EC',
-        });
-        await whatsappClient.sendMessage(`${normalizedPhone}@c.us`, message);
-
-        res.json({
-            success: true,
-            phone: normalizedPhone,
-        });
-    } catch (error) {
-        res.status(500).json({
-            error: 'No se pudo enviar el mensaje por WhatsApp',
-            detail: error.message,
-        });
-    }
-});
-
-app.post('/api/drive/upload-db', async (req, res) => {
-    try {
-        const { accessToken, folderId } = req.body || {};
-        const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
-
-        if (!accessToken) {
-            return res.status(400).json({ error: 'Falta accessToken' });
-        }
-
-        if (!targetFolderId) {
-            return res.status(400).json({ error: 'Falta folderId o GDRIVE_FOLDER_ID' });
-        }
-
-        if (!fs.existsSync(DB_FILE)) {
-            return res.status(404).json({ error: 'No existe db.json para subir' });
-        }
-
-        const fileName = 'db.json';
-        const fileBuffer = fs.readFileSync(DB_FILE);
-        let existingFile = null;
+    if (request.method === 'POST' && pathname === '/api/whatsapp/restart') {
         try {
-            existingFile = await findDriveDbFile(accessToken, targetFolderId);
+            restartWhatsAppAsync('Reiniciando manualmente la sesion de WhatsApp.');
+            return jsonResponse({
+                success: true,
+                status: whatsappState.status,
+            });
         } catch (error) {
-            return res.status(400).json({ error: 'Error buscando archivo en Drive', detail: error.message });
+            return errorResponse('No se pudo reiniciar WhatsApp', 500, error.message);
         }
-
-        const metadata = existingFile
-            ? { name: fileName }
-            : { name: fileName, parents: [targetFolderId] };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([fileBuffer], { type: 'application/json' }), fileName);
-
-        const uploadUrl = existingFile
-            ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
-            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-
-        const uploadResponse = await fetch(uploadUrl, {
-            method: existingFile ? 'PATCH' : 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            },
-            body: form,
-        });
-
-        const uploadText = await uploadResponse.text();
-        if (!uploadResponse.ok) {
-            return res.status(400).json({ error: 'Error subiendo db.json', detail: uploadText });
-        }
-
-        const uploadedFile = JSON.parse(uploadText);
-        res.json({
-            success: true,
-            action: existingFile ? 'updated' : 'created',
-            fileId: uploadedFile.id,
-            name: uploadedFile.name,
-        });
-    } catch (err) {
-        res.status(500).json({ error: 'Fallo en subida a Drive', detail: err.message });
     }
-});
 
-app.post('/api/drive/restore-db', async (req, res) => {
-    try {
-        const { accessToken, folderId } = req.body || {};
-        const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
-
-        if (!accessToken) {
-            return res.status(400).json({ error: 'Falta accessToken' });
-        }
-
-        if (!targetFolderId) {
-            return res.status(400).json({ error: 'Falta folderId o GDRIVE_FOLDER_ID' });
-        }
-
-        let driveFile = null;
+    if (request.method === 'POST' && pathname === '/api/whatsapp/disconnect') {
         try {
-            driveFile = await findDriveDbFile(accessToken, targetFolderId);
+            await disconnectWhatsAppAsync();
+            return jsonResponse({
+                success: true,
+                status: whatsappState.status,
+            });
         } catch (error) {
-            return res.status(400).json({ error: 'Error buscando archivo en Drive', detail: error.message });
+            return errorResponse('No se pudo desconectar WhatsApp', 500, error.message);
         }
+    }
 
-        if (!driveFile) {
-            return res.status(404).json({ error: 'No se encontró db.json en la carpeta de Drive' });
+    if (request.method === 'POST' && pathname === '/api/whatsapp/send-report') {
+        try {
+            const { name, type } = await readRequestJson(request);
+            const validTypes = ['receivables', 'payables', 'classes', 'savings'];
+            const data = readDB();
+
+            if (!name || !validTypes.includes(type)) {
+                return errorResponse('Faltan datos para enviar el reporte', 400);
+            }
+
+            if (!whatsappClient || whatsappState.status !== 'ready') {
+                return errorResponse('WhatsApp no esta listo todavia', 409);
+            }
+
+            const items = Array.isArray(data[type])
+                ? data[type].filter((item) => (item.name || item.student || 'Desconocido') === name)
+                : [];
+            if (!items.length) {
+                return errorResponse('No se encontraron registros para esa persona', 404);
+            }
+
+            const storedPhone = getGroupPhone(data, name, items);
+            const normalizedPhone = normalizeWhatsappNumber(storedPhone);
+
+            if (!normalizedPhone) {
+                return errorResponse('La persona no tiene un numero de WhatsApp valido guardado', 400);
+            }
+
+            const message = buildGroupReportMessage(name, type, items, {
+                locale: 'es-EC',
+            });
+            await whatsappClient.sendMessage(`${normalizedPhone}@c.us`, message);
+
+            return jsonResponse({
+                success: true,
+                phone: normalizedPhone,
+            });
+        } catch (error) {
+            if (error.message === 'Invalid JSON body') {
+                return errorResponse(error.message, 400);
+            }
+
+            return errorResponse('No se pudo enviar el mensaje por WhatsApp', 500, error.message);
         }
+    }
 
-        const downloadResponse = await fetch(
-            `https://www.googleapis.com/drive/v3/files/${driveFile.id}?alt=media`,
-            {
+    if (request.method === 'POST' && pathname === '/api/drive/upload-db') {
+        try {
+            const { accessToken, folderId } = await readRequestJson(request);
+            const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
+
+            if (!accessToken) {
+                return errorResponse('Falta accessToken', 400);
+            }
+
+            if (!targetFolderId) {
+                return errorResponse('Falta folderId o GDRIVE_FOLDER_ID', 400);
+            }
+
+            if (!fs.existsSync(DB_FILE)) {
+                return errorResponse('No existe db.json para subir', 404);
+            }
+
+            const fileName = 'db.json';
+            const fileBuffer = fs.readFileSync(DB_FILE);
+            let existingFile = null;
+            try {
+                existingFile = await findDriveDbFile(accessToken, targetFolderId);
+            } catch (error) {
+                return errorResponse('Error buscando archivo en Drive', 400, error.message);
+            }
+
+            const metadata = existingFile
+                ? { name: fileName }
+                : { name: fileName, parents: [targetFolderId] };
+
+            const form = new FormData();
+            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            form.append('file', new Blob([fileBuffer], { type: 'application/json' }), fileName);
+
+            const uploadUrl = existingFile
+                ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
+                : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+
+            const uploadResponse = await fetch(uploadUrl, {
+                method: existingFile ? 'PATCH' : 'POST',
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
                 },
+                body: form,
+            });
+
+            const uploadText = await uploadResponse.text();
+            if (!uploadResponse.ok) {
+                return errorResponse('Error subiendo db.json', 400, uploadText);
             }
-        );
 
-        if (!downloadResponse.ok) {
-            const detail = await downloadResponse.text();
-            return res.status(400).json({ error: 'Error descargando db.json desde Drive', detail });
+            const uploadedFile = JSON.parse(uploadText);
+            return jsonResponse({
+                success: true,
+                action: existingFile ? 'updated' : 'created',
+                fileId: uploadedFile.id,
+                name: uploadedFile.name,
+            });
+        } catch (error) {
+            if (error.message === 'Invalid JSON body') {
+                return errorResponse(error.message, 400);
+            }
+
+            return errorResponse('Fallo en subida a Drive', 500, error.message);
         }
-
-        const driveData = ensureDataShape(await downloadResponse.json());
-        writeDB(driveData);
-
-        res.json({
-            success: true,
-            name: driveFile.name,
-            modifiedTime: driveFile.modifiedTime,
-            data: driveData,
-        });
-    } catch (error) {
-        res.status(500).json({
-            error: 'No se pudo restaurar db.json desde Drive',
-            detail: error.message,
-        });
     }
-});
 
+    if (request.method === 'POST' && pathname === '/api/drive/restore-db') {
+        try {
+            const { accessToken, folderId } = await readRequestJson(request);
+            const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
+
+            if (!accessToken) {
+                return errorResponse('Falta accessToken', 400);
+            }
+
+            if (!targetFolderId) {
+                return errorResponse('Falta folderId o GDRIVE_FOLDER_ID', 400);
+            }
+
+            let driveFile = null;
+            try {
+                driveFile = await findDriveDbFile(accessToken, targetFolderId);
+            } catch (error) {
+                return errorResponse('Error buscando archivo en Drive', 400, error.message);
+            }
+
+            if (!driveFile) {
+                return errorResponse('No se encontró db.json en la carpeta de Drive', 404);
+            }
+
+            const downloadResponse = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${driveFile.id}?alt=media`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            if (!downloadResponse.ok) {
+                const detail = await downloadResponse.text();
+                return errorResponse('Error descargando db.json desde Drive', 400, detail);
+            }
+
+            const driveData = ensureDataShape(await downloadResponse.json());
+            writeDB(driveData);
+
+            return jsonResponse({
+                success: true,
+                name: driveFile.name,
+                modifiedTime: driveFile.modifiedTime,
+                data: driveData,
+            });
+        } catch (error) {
+            if (error.message === 'Invalid JSON body') {
+                return errorResponse(error.message, 400);
+            }
+
+            return errorResponse('No se pudo restaurar db.json desde Drive', 500, error.message);
+        }
+    }
+
+    const staticResponse = await serveStaticFile(pathname);
+    if (staticResponse) {
+        return staticResponse;
+    }
+
+    return errorResponse('Not found', 404);
+};
+
+const startServer = () => {
+    for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt += 1) {
+        const candidatePort = REQUESTED_PORT + attempt;
+
+        try {
+            return Bun.serve({
+                port: candidatePort,
+                fetch: handleRequest,
+            });
+        } catch (error) {
+            if (error.code !== 'EADDRINUSE' || attempt === MAX_PORT_ATTEMPTS - 1) {
+                throw error;
+            }
+
+            console.warn(`Puerto ${candidatePort} ocupado. Reintentando con ${candidatePort + 1}...`);
+        }
+    }
+
+    throw new Error('No se encontró un puerto disponible para iniciar el servidor');
+};
+// Captura cuando cierras el programa con Ctrl+C
+process.on('SIGINT', async () => {
+    console.log('\nCerrando servidor y limpiando Puppeteer...');
+    try {
+        if (whatsappClient) {
+            await whatsappClient.destroy();
+            console.log('WhatsApp cerrado limpiamente.');
+        }
+    } catch (e) {
+        console.error('Error al cerrar WhatsApp:', e.message);
+    }
+    process.exit(0);
+});
 // Start Server
-app.listen(PORT, () => {
-    console.log('\n==================================================');
-    console.log('SERVIDOR ACTIVO');
-    console.log(`Base de datos: ${DB_FILE}`);
-    console.log(`Abre tu navegador en: http://localhost:${PORT}`);
-    console.log('==================================================\n');
+const server = startServer();
+const activePort = server.port;
 
-    if (process.platform === 'win32') {
-        const { exec } = require('child_process');
-        exec(`start http://localhost:${PORT}/index.html`);
-    }
+console.log('\n==================================================');
+console.log('SERVIDOR ACTIVO');
+console.log(`Base de datos: ${DB_FILE}`);
+console.log(`Abre tu navegador en: http://localhost:${activePort}`);
+console.log('==================================================\n');
+
+if (process.platform === 'win32') {
+    const { exec } = require('child_process');
+    exec(`start http://localhost:${activePort}/index.html`);
+}
+
+process.on('SIGINT', () => {
+    void shutdownServerAsync('SIGINT');
 });
+
+process.on('SIGTERM', () => {
+    void shutdownServerAsync('SIGTERM');
+});
+
+process.on('SIGBREAK', () => {
+    void shutdownServerAsync('SIGBREAK');
+});
+
+void server;
