@@ -14,16 +14,6 @@ const app = {
   googleTokenClient: null,
   googleAccessToken: "",
   oauthTokenPromiseResolvers: null,
-  whatsapp: {
-    status: "idle",
-    qrDataUrl: "",
-    qrGeneratedAt: null,
-    qrExpiresAt: null,
-    info: null,
-    lastError: "",
-  },
-  whatsappPollInterval: null,
-  whatsappActionInFlight: false,
   themes: [
     { id: 'green-cascade', name: 'Green Cascade' },
     { id: 'deep-purple', name: 'Deep Purple' },
@@ -40,7 +30,6 @@ const app = {
         this.initGoogleOAuth();
         await this.loadData();
         this.loadTheme();
-        await this.initWhatsApp();
         this.navigate('dashboard');
     },
 
@@ -93,338 +82,6 @@ const app = {
             this.oauthTokenPromiseResolvers = { resolve, reject };
             this.googleTokenClient.requestAccessToken({ prompt: promptMode });
         });
-    },
-
-    getFriendlyNetworkError(error, fallback = 'No se pudo completar la solicitud') {
-        const message = error && error.message ? error.message : String(error || '');
-        if (/failed to fetch/i.test(message)) {
-            return 'No se pudo conectar con el servidor. Revisa si la consola de Node sigue abierta.';
-        }
-
-        return message || fallback;
-    },
-
-    async initWhatsApp() {
-        await this.refreshWhatsAppStatus();
-        this.startWhatsAppPolling();
-    },
-
-    startWhatsAppPolling() {
-        if (this.whatsappPollInterval) {
-            return;
-        }
-
-        this.whatsappPollInterval = setInterval(() => {
-            this.refreshWhatsAppStatus();
-        }, 3000);
-    },
-
-    async refreshWhatsAppStatus() {
-        try {
-            const response = await fetch('/api/whatsapp/status');
-            if (!response.ok) {
-                throw new Error('No se pudo consultar el estado de WhatsApp');
-            }
-
-            const result = await response.json();
-            this.whatsapp = {
-                status: result.status || 'idle',
-                qrDataUrl: result.qrDataUrl || '',
-                qrGeneratedAt: result.qrGeneratedAt || null,
-                qrExpiresAt: result.qrExpiresAt || null,
-                info: result.info || null,
-                lastError: result.lastError || '',
-            };
-        } catch (error) {
-            console.error('Error consultando estado de WhatsApp', error);
-            this.whatsapp = {
-                status: 'error',
-                qrDataUrl: '',
-                qrGeneratedAt: null,
-                qrExpiresAt: null,
-                info: null,
-                lastError: this.getFriendlyNetworkError(error, 'No se pudo consultar el estado de WhatsApp'),
-            };
-        }
-
-        this.updateWhatsAppUI();
-
-        const whatsAppModal = document.getElementById('whatsapp-modal');
-        if (whatsAppModal && !whatsAppModal.classList.contains('hidden') && this.whatsapp.status !== 'ready') {
-            if (this.whatsapp.status === 'qr_expired' || (this.whatsapp.qrDataUrl && this.isQrExpired())) {
-                this.ensureFreshQr();
-            }
-        }
-    },
-
-    getWhatsAppStatusMeta() {
-        const status = this.whatsapp.status;
-
-        switch (status) {
-            case 'ready':
-                return {
-                    badge: 'Conectado',
-                    badgeClass: 'bg-emerald-500/20 text-emerald-300',
-                    text: 'Cliente listo para enviar mensajes.',
-                    qrButtonText: 'Ver estado',
-                };
-            case 'qr':
-                return {
-                    badge: 'QR listo',
-                    badgeClass: 'bg-amber-500/20 text-amber-300',
-                    text: 'Escanea el QR para vincular tu sesion.',
-                    qrButtonText: 'Ver QR',
-                };
-            case 'authenticated':
-                return {
-                    badge: 'Cargando',
-                    badgeClass: 'bg-blue-500/20 text-blue-300',
-                    text: 'QR escaneado. Terminando la vinculacion...',
-                    qrButtonText: 'Ver QR',
-                };
-            case 'restarting':
-            case 'qr_expired':
-                return {
-                    badge: 'Renovando',
-                    badgeClass: 'bg-amber-500/20 text-amber-300',
-                    text: this.whatsapp.lastError || 'Generando un QR nuevo...',
-                    qrButtonText: 'Ver QR',
-                };
-            case 'loading':
-            case 'initializing':
-                return {
-                    badge: 'Cargando',
-                    badgeClass: 'bg-blue-500/20 text-blue-300',
-                    text: 'WhatsApp se esta preparando...',
-                    qrButtonText: 'Ver estado',
-                };
-            case 'auth_failure':
-                return {
-                    badge: 'Error',
-                    badgeClass: 'bg-rose-500/20 text-rose-300',
-                    text: this.whatsapp.lastError || 'Hubo un problema autenticando la sesion.',
-                    qrButtonText: 'Revisar',
-                };
-            case 'disconnected':
-                return {
-                    badge: 'Desconectado',
-                    badgeClass: 'bg-rose-500/20 text-rose-300',
-                    text: 'La sesion se desconecto. Puedes reiniciarla.',
-                    qrButtonText: 'Reconectar',
-                };
-            case 'error':
-                return {
-                    badge: 'Error',
-                    badgeClass: 'bg-rose-500/20 text-rose-300',
-                    text: this.whatsapp.lastError || 'No se pudo iniciar WhatsApp.',
-                    qrButtonText: 'Revisar',
-                };
-            default:
-                return {
-                    badge: 'Inactivo',
-                    badgeClass: 'bg-gray-700 text-gray-300',
-                    text: 'Esperando inicializacion de WhatsApp.',
-                    qrButtonText: 'Ver QR',
-                };
-        }
-    },
-
-    updateWhatsAppUI() {
-        const meta = this.getWhatsAppStatusMeta();
-        const qrButton = document.getElementById('whatsapp-action-btn');
-        const qrImage = document.getElementById('whatsapp-qr-image');
-        const qrPlaceholder = document.getElementById('whatsapp-qr-placeholder');
-        const qrMessage = document.getElementById('whatsapp-qr-message');
-        const qrStatus = document.getElementById('whatsapp-qr-status');
-        const modalActionBtn = document.getElementById('whatsapp-modal-action-btn');
-
-        if (qrButton) {
-            const isReady = this.whatsapp.status === 'ready';
-            qrButton.innerHTML = isReady
-                ? '<span class="inline-flex items-center justify-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Conectado</span></span>'
-                : 'Conectar';
-            qrButton.className = isReady
-                ? 'w-full px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm font-medium transition hover:bg-emerald-500/20'
-                : 'w-full px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium transition';
-        }
-
-        if (modalActionBtn) {
-            if (this.whatsapp.status === 'ready') {
-                modalActionBtn.textContent = 'Desconectar';
-                modalActionBtn.className = 'px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-colors';
-            } else {
-                modalActionBtn.textContent = 'Regenerar QR';
-                modalActionBtn.className = 'px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors';
-            }
-        }
-
-        if (qrImage && qrPlaceholder) {
-            if (this.whatsapp.qrDataUrl) {
-                qrImage.src = this.whatsapp.qrDataUrl;
-                qrImage.classList.remove('hidden');
-                qrPlaceholder.classList.add('hidden');
-            } else {
-                qrImage.removeAttribute('src');
-                qrImage.classList.add('hidden');
-                qrPlaceholder.classList.remove('hidden');
-            }
-        }
-
-        if (qrMessage) {
-            if (this.whatsapp.status === 'ready') {
-                qrMessage.textContent = 'La sesion ya esta conectada.';
-            } else if (this.whatsapp.status === 'authenticated') {
-                qrMessage.textContent = 'QR escaneado. Esperando la conexion final...';
-            } else if (this.isQrExpired()) {
-                qrMessage.textContent = 'El QR vencio. Generando uno nuevo...';
-            } else {
-                qrMessage.textContent = this.whatsapp.lastError || 'Esperando QR...';
-            }
-        }
-
-        if (qrStatus) {
-            if (this.whatsapp.status === 'ready') {
-                qrStatus.textContent = 'WhatsApp listo. Ya puedes enviar reportes desde "Por Cobrar".';
-            } else if (this.whatsapp.qrDataUrl) {
-                const secondsLeft = this.getQrSecondsLeft();
-                qrStatus.textContent = secondsLeft > 0
-                    ? `Abre WhatsApp en tu telefono y escanea este codigo. Se renueva solo en ${secondsLeft}s.`
-                    : 'El QR ya vencio. Se esta generando uno nuevo.';
-            } else {
-                qrStatus.textContent = meta.text;
-            }
-        }
-    },
-
-    isQrExpired() {
-        if (!this.whatsapp.qrExpiresAt) {
-            return false;
-        }
-
-        return Date.now() >= new Date(this.whatsapp.qrExpiresAt).getTime();
-    },
-
-    getQrSecondsLeft() {
-        if (!this.whatsapp.qrExpiresAt) {
-            return 0;
-        }
-
-        const diffMs = new Date(this.whatsapp.qrExpiresAt).getTime() - Date.now();
-        return Math.max(0, Math.ceil(diffMs / 1000));
-    },
-
-    async ensureFreshQr() {
-        const needsRestart = ['idle', 'error', 'disconnected', 'auth_failure', 'qr_expired'].includes(this.whatsapp.status)
-            || (this.whatsapp.qrDataUrl && this.isQrExpired());
-
-        if (needsRestart) {
-            await this.restartWhatsApp(true);
-            return;
-        }
-
-        if (!this.whatsapp.qrDataUrl && !['authenticated', 'ready', 'initializing', 'loading', 'restarting'].includes(this.whatsapp.status)) {
-            try {
-                await fetch('/api/whatsapp/init', {
-                    method: 'POST',
-                });
-                await this.refreshWhatsAppStatus();
-            } catch (error) {
-                console.error('No se pudo pedir un QR nuevo', error);
-                this.showToast(this.getFriendlyNetworkError(error, 'No se pudo pedir un QR nuevo'), 'error');
-            }
-        }
-    },
-
-    async openWhatsAppModal() {
-        const modal = document.getElementById('whatsapp-modal');
-        const content = document.getElementById('whatsapp-modal-content');
-        if (!modal || !content) return;
-
-        modal.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            content.classList.remove('scale-95', 'opacity-0');
-        });
-
-        await this.refreshWhatsAppStatus();
-        if (this.whatsapp.status !== 'ready') {
-            await this.ensureFreshQr();
-        }
-    },
-
-    closeWhatsAppModal() {
-        const modal = document.getElementById('whatsapp-modal');
-        const content = document.getElementById('whatsapp-modal-content');
-        if (!modal || !content) return;
-
-        content.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => {
-            modal.classList.add('hidden');
-        }, 200);
-    },
-
-    async restartWhatsApp(silent = false) {
-        if (this.whatsappActionInFlight) {
-            return;
-        }
-
-        this.whatsappActionInFlight = true;
-        try {
-            const response = await fetch('/api/whatsapp/restart', {
-                method: 'POST',
-            });
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || result.detail || 'No se pudo reiniciar WhatsApp');
-            }
-
-            if (!silent) {
-                this.showToast('Cliente de WhatsApp reiniciado');
-            }
-            await this.refreshWhatsAppStatus();
-        } catch (error) {
-            console.error('Error reiniciando WhatsApp', error);
-            if (!silent) {
-                this.showToast(this.getFriendlyNetworkError(error, 'No se pudo reiniciar WhatsApp'), 'error');
-            }
-        } finally {
-            this.whatsappActionInFlight = false;
-        }
-    },
-
-    async disconnectWhatsApp() {
-        if (this.whatsappActionInFlight) {
-            return;
-        }
-
-        this.whatsappActionInFlight = true;
-        try {
-            const response = await fetch('/api/whatsapp/disconnect', {
-                method: 'POST',
-            });
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || result.detail || 'No se pudo desconectar WhatsApp');
-            }
-
-            this.showToast('Sesion de WhatsApp desconectada');
-            await this.refreshWhatsAppStatus();
-        } catch (error) {
-            console.error('Error desconectando WhatsApp', error);
-            this.showToast(this.getFriendlyNetworkError(error, 'No se pudo desconectar WhatsApp'), 'error');
-        } finally {
-            this.whatsappActionInFlight = false;
-        }
-    },
-
-    async handleWhatsAppModalAction() {
-        if (this.whatsapp.status === 'ready') {
-            await this.disconnectWhatsApp();
-            return;
-        }
-
-        await this.restartWhatsApp();
     },
 
     async loadData() {
@@ -1080,13 +737,9 @@ const app = {
             groupEntries.forEach(([key, group]) => {
                 const cleanId = key.replace(/[^a-zA-Z0-9]/g, '');
                 const escapedKey = key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                const showWhatsAppAction = type === 'receivables';
                 const showEditContactAction = type === 'receivables';
                 const debtItems = group.items.filter(item => !item.isNote);
                 const hasDebt = debtItems.length > 0;
-                const whatsappTitle = group.phone
-                    ? `Enviar reporte a ${group.phone}`
-                    : 'Agrega un numero de WhatsApp a esta persona';
                 const deleteAction = type === 'receivables'
                     ? (hasDebt
                         ? `app.confirmDeleteGroup('${type}', '${escapedKey}')`
@@ -1110,7 +763,7 @@ const app = {
                             <div>
                                 <h3 class="text-lg font-bold text-white group-hover:text-brand-400 transition">${key}</h3>
                                 <p class="text-xs text-gray-400">${group.items.length} registro(s)</p>
-                                ${group.phone ? `<p class="text-xs text-brand-400 mt-1"><i class="fa-brands fa-whatsapp mr-1"></i>${group.phone}</p>` : ''}
+                                ${group.phone ? `<p class="text-xs text-brand-400 mt-1"><i class="fa-solid fa-phone mr-1"></i>${group.phone}</p>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-4">
@@ -1120,11 +773,6 @@ const app = {
                              ${showEditContactAction ? `
                              <span onclick="event.stopPropagation(); app.openReceivableContactModal('${escapedKey}')" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-sky-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="Editar cliente">
                                 <i class="fa-solid fa-user-pen"></i>
-                             </span>
-                             ` : ''}
-                             ${showWhatsAppAction ? `
-                             <span onclick="event.stopPropagation(); app.sendWhatsAppReport('${escapedKey}', '${type}')" class="w-8 h-8 rounded-full ${(group.phone && hasDebt) ? 'bg-emerald-500/20 hover:bg-emerald-500' : 'bg-gray-700 hover:bg-gray-600'} flex items-center justify-center text-${(group.phone && hasDebt) ? 'emerald-300 hover:text-white' : 'gray-300 hover:text-white'} transition-colors mr-2 z-20" title="${hasDebt ? whatsappTitle : 'No hay deuda pendiente para enviar'}">
-                                <i class="fa-brands fa-whatsapp"></i>
                              </span>
                              ` : ''}
                              <!-- Copy Button -->
@@ -1317,7 +965,7 @@ const app = {
                     <input type="text" id="input-contact-name" value="${contact?.name || prefillName || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. Jimmy">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1">WhatsApp</label>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Teléfono</label>
                     <input type="text" id="input-contact-phone" value="${contact?.phone || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000">
                     <p class="text-xs text-gray-500 mt-1">Puedes dejarlo vacio si todavia no tienes el numero.</p>
                 </div>
@@ -1339,7 +987,7 @@ const app = {
                 </div>
                 ${type === "receivables" ? `
                 <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1">WhatsApp (opcional)</label>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Teléfono (opcional)</label>
                     <input type="text" id="input-phone" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000 o 096 292 0000">
                     <p class="text-xs text-gray-500 mt-1">Acepta formatos como <code>+593 00 000 0000</code>, <code>0962900000</code> o <code>096 292 0000</code>.</p>
                 </div>
@@ -1433,7 +1081,7 @@ const app = {
     }
 
     if (normalizedPhone === null) {
-      return this.showToast("Numero de WhatsApp invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
+      return this.showToast("Numero de telefono invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
     }
 
     this.renameReceivableContact(oldName || newName, newName, normalizedPhone || "");
@@ -1458,7 +1106,7 @@ const app = {
         const fallbackPhone = this.getGroupPhone(newItem.name, type) || "";
         const normalizedPhone = this.normalizePhoneInput(phoneInputValue || fallbackPhone);
         if (normalizedPhone === null) {
-          return this.showToast("Numero de WhatsApp invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
+          return this.showToast("Numero de telefono invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
         }
         if (normalizedPhone) {
           newItem.phone = normalizedPhone;
@@ -1559,7 +1207,7 @@ const app = {
       // Update Text
       if (type === 'receivables') {
           modal.querySelector('h3').textContent = `¿Borrar deuda de ${name}?`;
-          modal.querySelector('p').textContent = `Se eliminarán solo los movimientos de deuda. El cliente y su WhatsApp se conservarán.`;
+          modal.querySelector('p').textContent = `Se eliminarán solo los movimientos de deuda. El cliente y su contacto se conservarán.`;
       } else {
           modal.querySelector('h3').textContent = `¿Limpiar historial de ${name}?`;
           modal.querySelector('p').textContent = `Se borrarán TODOS los registros de ${name}. No podrás deshacer esto.`;
@@ -1583,7 +1231,7 @@ const app = {
       const confirmBtn = document.getElementById('confirm-delete-btn');
 
       modal.querySelector('h3').textContent = `¿Borrar cliente ${name}?`;
-      modal.querySelector('p').textContent = `Se borrará la persona y su WhatsApp guardado. Esta acción no se puede deshacer.`;
+      modal.querySelector('p').textContent = `Se borrará la persona y su contacto guardado. Esta acción no se puede deshacer.`;
 
       modal.classList.remove('hidden');
       requestAnimationFrame(() => {
@@ -1682,85 +1330,6 @@ const app = {
           console.error(err);
           this.showToast('Error al copiar', 'error');
       });
-  },
-
-   sendWhatsAppReport(name, type) {
-
-    const modal = document.getElementById('confirm-modal');
-    const content = document.getElementById('confirm-modal-content');
-    const confirmBtn = document.getElementById('confirm-delete-btn');
-
-
-
-      if (type !== 'receivables') {
-          this.showToast('El envio por WhatsApp esta disponible en "Por Cobrar"', 'error');
-          return;
-      }
-
-      const phone = this.getGroupPhone(name, type);
-      if (!phone) {
-          this.showToast('Agrega un numero de WhatsApp a esta persona para poder enviarle el reporte', 'error');
-          return;
-      }
-
-      if (!this.buildGroupDetailsText(name, type)) {
-          this.showToast('No hay deuda pendiente para enviar', 'error');
-          return;
-      }
-
-      if (this.whatsapp.status !== 'ready') {
-          this.openWhatsAppModal();
-          this.showToast('Conecta WhatsApp primero y luego vuelve a intentarlo', 'error');
-          return;
-      }
-
-      
-      //modal para confirmar el envio a whatsapp
-      modal.querySelector('h3').textContent = `Enviar reporte a ${name}`;
-      modal.querySelector('p').textContent = `¿Seguro que deseas enviar el reporte de ${name} a ${phone}?`;
-        
-      
-      this.setConfirmButtonVariant('success', 'Enviar');
-
-
-      modal.classList.remove('hidden');
-      requestAnimationFrame(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-      });
-          
-
-    confirmBtn.onclick = async () => { 
-      let sentSuccessfully = false;
-      try {
-          this.setConfirmButtonVariant('success', 'Enviando...', true);
-
-          const response = await fetch('/api/whatsapp/send-report', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, type })
-          });
-          
-          const result = await response.json();
-
-          if (!response.ok) {
-              throw new Error(result.error || result.detail || 'No se pudo enviar el reporte');
-          }
-          
-          sentSuccessfully = true;
-          this.closeConfirmModal();
-          this.showToast(`Reporte enviado a ${phone}`);
-          
-      } catch (error) {
-          console.error('Error enviando reporte por WhatsApp', error);
-          this.showToast(error.message || 'No se pudo enviar el reporte', 'error');
-        
-      } finally {
-          if (!sentSuccessfully) {
-              this.setConfirmButtonVariant('success', 'Enviar');
-          }
-      }
-    };
   },
 
   executeDelete(type, index) {
