@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const { sanitizeDataForSave } = require('./js/receivableData.js');
 
 const REQUESTED_PORT = Number(process.env.PORT || 4343);
 const MAX_PORT_ATTEMPTS = 10;
@@ -95,6 +96,8 @@ const ensureDataShape = (data) => {
     };
 };
 
+const sanitizeStoredData = (data) => sanitizeDataForSave(ensureDataShape(data));
+
 const readDB = () => {
     if (!fs.existsSync(DB_FILE)) {
         const initialData = createEmptyData();
@@ -103,11 +106,11 @@ const readDB = () => {
     }
 
     const data = fs.readFileSync(DB_FILE, 'utf8');
-    return ensureDataShape(JSON.parse(data || '{}'));
+    return sanitizeStoredData(JSON.parse(data || '{}'));
 };
 
 const writeDB = (data) => {
-    fs.writeFileSync(DB_FILE, JSON.stringify(ensureDataShape(data), null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify(sanitizeStoredData(data), null, 2));
 };
 
 const findDriveDbFile = async (accessToken, targetFolderId) => {
@@ -196,7 +199,7 @@ const handleRequest = async (request) => {
             }
 
             const fileName = 'db.json';
-            const fileBuffer = fs.readFileSync(DB_FILE);
+            const fileBuffer = Buffer.from(JSON.stringify(readDB(), null, 2));
             let existingFile = null;
             try {
                 existingFile = await findDriveDbFile(accessToken, targetFolderId);
@@ -283,7 +286,7 @@ const handleRequest = async (request) => {
                 return errorResponse('Error descargando db.json desde Drive', 400, detail);
             }
 
-            const driveData = ensureDataShape(await downloadResponse.json());
+            const driveData = sanitizeStoredData(await downloadResponse.json());
             writeDB(driveData);
 
             return jsonResponse({
@@ -330,34 +333,47 @@ const startServer = () => {
     throw new Error('No se encontró un puerto disponible para iniciar el servidor');
 };
 
-const server = startServer();
-const activePort = server.port;
+if (require.main === module) {
+    const server = startServer();
+    const activePort = server.port;
 
-console.log('\n==================================================');
-console.log('SERVIDOR ACTIVO');
-console.log(`Base de datos: ${DB_FILE}`);
-console.log(`Abre tu navegador en: http://localhost:${activePort}`);
-console.log('==================================================\n');
+    console.log('\n==================================================');
+    console.log('SERVIDOR ACTIVO');
+    console.log(`Base de datos: ${DB_FILE}`);
+    console.log(`Abre tu navegador en: http://localhost:${activePort}`);
+    console.log('==================================================\n');
 
-if (process.platform === 'win32') {
-    const { exec } = require('child_process');
-    exec(`start http://localhost:${activePort}/index.html`);
+    if (process.platform === 'win32') {
+        const { exec } = require('child_process');
+        exec(`start http://localhost:${activePort}/index.html`);
+    }
+
+    process.on('SIGINT', () => {
+        console.log('\nCerrando servidor...');
+        server.stop(true);
+        process.exit(0);
+    });
+
+    process.on('SIGTERM', () => {
+        console.log('\nCerrando servidor...');
+        server.stop(true);
+        process.exit(0);
+    });
+
+    process.on('SIGBREAK', () => {
+        console.log('\nCerrando servidor...');
+        server.stop(true);
+        process.exit(0);
+    });
 }
 
-process.on('SIGINT', () => {
-    console.log('\nCerrando servidor...');
-    server.stop(true);
-    process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-    console.log('\nCerrando servidor...');
-    server.stop(true);
-    process.exit(0);
-});
-
-process.on('SIGBREAK', () => {
-    console.log('\nCerrando servidor...');
-    server.stop(true);
-    process.exit(0);
-});
+module.exports = {
+    sanitizeStoredData,
+    readDB,
+    writeDB,
+    ensureDataShape,
+    createEmptyData,
+    handleRequest,
+    startServer,
+    DB_FILE,
+};

@@ -7,3 +7,5 @@ db.json
 .wwebjs_auth/
 .wwebjs_cache/
 .commandcode
+.kimchi
+docs

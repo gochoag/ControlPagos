@@ -21,6 +21,7 @@ const app = {
   ],
   currentThemeIndex: 0,
   reportFormatter: window.ControlPagosReportFormatter,
+  receivableData: window.ControlPagosReceivableData,
   driveMenuOpen: false,
     backupMenuOpen: false,
 
@@ -117,6 +118,7 @@ const app = {
         if (!this.data.classes) this.data.classes = [];
         if (!this.data.memberships) this.data.memberships = [];
         if (!this.data.savings) this.data.savings = [];
+        this.data = this.receivableData.sanitizeDataForSave(this.data);
         this.syncReceivableContacts();
 
         this.updateSidebarBalance();
@@ -124,6 +126,7 @@ const app = {
 
     async saveData() {
         this.syncReceivableContacts();
+        this.data = this.receivableData.sanitizeDataForSave(this.data);
         // 1. Save locally immediately for speed/backup
         localStorage.setItem('controlPagosData_v1', JSON.stringify(this.data));
         this.updateSidebarBalance();
@@ -143,7 +146,8 @@ const app = {
     },
 
     downloadBackup() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.data, null, 2));
+        const dataToBackup = this.receivableData.sanitizeDataForSave(this.data);
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToBackup, null, 2));
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
         downloadAnchorNode.setAttribute("download", "control_pagos_backup_" + new Date().toISOString().slice(0,10) + ".json");
@@ -162,7 +166,7 @@ const app = {
             try {
                 const json = JSON.parse(e.target.result);
                 if (json.receivables && json.payables) {
-                    this.data = json;
+                    this.data = this.receivableData.sanitizeDataForSave(json);
                     if(!this.data.savings) this.data.savings = []; // Ensure compatibility with old backups
                     this.saveData();
                     this.navigate(this.currentView);
@@ -263,7 +267,7 @@ const app = {
                 throw new Error(result.error || result.detail || 'No se pudo restaurar db.json desde Drive');
             }
 
-            this.data = result.data;
+            this.data = this.receivableData.sanitizeDataForSave(result.data);
             this.syncReceivableContacts();
             localStorage.setItem('controlPagosData_v1', JSON.stringify(this.data));
             this.updateSidebarBalance();
@@ -418,49 +422,13 @@ const app = {
   },
 
   sanitizeEntityName(name) {
-    return String(name || "").trim();
+    return this.receivableData.sanitizeEntityName(name);
   },
 
   syncReceivableContacts() {
-    const existingContacts = Array.isArray(this.data.receivableContacts)
-      ? this.data.receivableContacts
-      : [];
-    const contactMap = new Map();
-
-    existingContacts.forEach((contact) => {
-      const name = this.sanitizeEntityName(contact.name);
-      if (!name) return;
-
-      const normalizedPhone = this.normalizePhoneInput(contact.phone || "");
-      contactMap.set(name, {
-        id: contact.id || Date.now() + Math.floor(Math.random() * 1000),
-        name,
-        phone: normalizedPhone === null ? "" : normalizedPhone,
-      });
-    });
-
-    this.data.receivables.forEach((item) => {
-      const name = this.sanitizeEntityName(item.name);
-      if (!name) return;
-
-      const normalizedPhone = this.normalizePhoneInput(item.phone || "");
-      if (!contactMap.has(name)) {
-        contactMap.set(name, {
-          id: Date.now() + Math.floor(Math.random() * 1000),
-          name,
-          phone: normalizedPhone && normalizedPhone !== null ? normalizedPhone : "",
-        });
-        return;
-      }
-
-      const current = contactMap.get(name);
-      if (!current.phone && normalizedPhone && normalizedPhone !== null) {
-        current.phone = normalizedPhone;
-      }
-    });
-
-    this.data.receivableContacts = Array.from(contactMap.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, "es", { sensitivity: "base" })
+    this.data.receivableContacts = this.receivableData.buildReceivableContacts(
+      this.data.receivableContacts,
+      this.data.receivables
     );
   },
 
@@ -469,38 +437,30 @@ const app = {
     return (this.data.receivableContacts || []).find((contact) => contact.name === cleanName) || null;
   },
 
-  upsertReceivableContact(name, phone = "") {
+  upsertReceivableContact(name) {
     const cleanName = this.sanitizeEntityName(name);
     if (!cleanName) return null;
 
-    const normalizedPhone = this.normalizePhoneInput(phone || "");
-    const safePhone = normalizedPhone === null ? "" : normalizedPhone;
     const existing = this.getReceivableContact(cleanName);
 
     if (existing) {
-      existing.phone = safePhone || existing.phone || "";
       return existing;
     }
 
     const contact = {
       id: Date.now(),
       name: cleanName,
-      phone: safePhone,
     };
     this.data.receivableContacts.push(contact);
     this.syncReceivableContacts();
     return contact;
   },
 
-  renameReceivableContact(oldName, newName, phone = "") {
+  renameReceivableContact(oldName, newName) {
     const cleanOldName = this.sanitizeEntityName(oldName);
     const cleanNewName = this.sanitizeEntityName(newName);
     if (!cleanNewName) return false;
 
-    const normalizedPhone = this.normalizePhoneInput(phone || "");
-    if (normalizedPhone === null) return null;
-
-    const targetPhone = normalizedPhone || "";
     const currentContact = this.getReceivableContact(cleanOldName);
     const duplicateContact = this.getReceivableContact(cleanNewName);
 
@@ -508,25 +468,19 @@ const app = {
       if ((item.name || "") === cleanOldName) {
         item.name = cleanNewName;
       }
-      if ((item.name || "") === cleanNewName) {
-        if (targetPhone) item.phone = targetPhone;
-        else delete item.phone;
-      }
+      if ((item.name || "") === cleanNewName) delete item.phone;
     });
 
     if (duplicateContact && duplicateContact !== currentContact) {
-      duplicateContact.phone = targetPhone || duplicateContact.phone || "";
       this.data.receivableContacts = this.data.receivableContacts.filter(
         (contact) => contact !== currentContact
       );
     } else if (currentContact) {
       currentContact.name = cleanNewName;
-      currentContact.phone = targetPhone;
     } else {
       this.data.receivableContacts.push({
         id: Date.now(),
         name: cleanNewName,
-        phone: targetPhone,
       });
     }
 
@@ -547,7 +501,6 @@ const app = {
         grouped[contact.name] = {
           total: 0,
           items: [],
-          phone: contact.phone || "",
         };
       });
     }
@@ -555,16 +508,10 @@ const app = {
     sourceItems.forEach((item) => {
       const name = item.name || item.student || "Desconocido";
       if (!grouped[name]) {
-        grouped[name] = { total: 0, items: [], phone: "" };
+        grouped[name] = { total: 0, items: [] };
       }
 
       grouped[name].items.push(item);
-
-      if (type === "receivables") {
-        grouped[name].phone = grouped[name].phone || this.getGroupPhone(name, type) || "";
-      } else if (!grouped[name].phone && item.phone) {
-        grouped[name].phone = item.phone;
-      }
 
       if (!item.isNote) {
         grouped[name].total += Number(type === "classes" ? item.hours : item.amount);
@@ -698,8 +645,7 @@ const app = {
             const lowerTerm = searchTerm.toLowerCase();
             groupEntries = groupEntries.filter(([name, group]) => {
                 const descriptionText = group.items.map((item) => item.desc || "").join(" ").toLowerCase();
-                const phone = (group.phone || "").toLowerCase();
-                return name.toLowerCase().includes(lowerTerm) || descriptionText.includes(lowerTerm) || phone.includes(lowerTerm);
+                return name.toLowerCase().includes(lowerTerm) || descriptionText.includes(lowerTerm);
             });
         }
 
@@ -763,7 +709,6 @@ const app = {
                             <div>
                                 <h3 class="text-lg font-bold text-white group-hover:text-brand-400 transition">${key}</h3>
                                 <p class="text-xs text-gray-400">${group.items.length} registro(s)</p>
-                                ${group.phone ? `<p class="text-xs text-brand-400 mt-1"><i class="fa-solid fa-phone mr-1"></i>${group.phone}</p>` : ''}
                             </div>
                         </div>
                         <div class="flex items-center space-x-4">
@@ -865,13 +810,19 @@ const app = {
     toggleAccordion(id) {
         const body = document.getElementById(`body-${id}`);
         const icon = document.getElementById(`icon-${id}`);
-        if(body.classList.contains('hidden')) {
+        const willOpen = body.classList.contains('hidden');
+        if (willOpen) {
             body.classList.remove('hidden');
             icon.classList.add('rotate-180');
         } else {
             body.classList.add('hidden');
             icon.classList.remove('rotate-180');
         }
+        // Keep currentAccordionState in sync with the DOM so re-renders
+        // (e.g. after saving a record on another group) don't resurrect
+        // accordions the user has manually collapsed.
+        this.currentAccordionState = this.currentAccordionState || {};
+        this.currentAccordionState[id] = willOpen;
     },
 
   renderClasses(container) {
@@ -964,11 +915,6 @@ const app = {
                     <label class="block text-sm font-medium text-gray-400 mb-1">Nombre del cliente</label>
                     <input type="text" id="input-contact-name" value="${contact?.name || prefillName || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. Jimmy">
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1">Teléfono</label>
-                    <input type="text" id="input-contact-phone" value="${contact?.phone || ''}" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000">
-                    <p class="text-xs text-gray-500 mt-1">Puedes dejarlo vacio si todavia no tienes el numero.</p>
-                </div>
             `;
       saveBtn.onclick = () => this.saveReceivableContact();
     } else if (type === "receivables" || type === "payables") {
@@ -985,13 +931,6 @@ const app = {
                     <label class="block text-sm font-medium text-gray-400 mb-1">Monto ($)</label>
                     <input type="number" step="0.01" id="input-amount" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="0.00">
                 </div>
-                ${type === "receivables" ? `
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-1">Teléfono (opcional)</label>
-                    <input type="text" id="input-phone" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Ej. +593 00 000 0000 o 096 292 0000">
-                    <p class="text-xs text-gray-500 mt-1">Acepta formatos como <code>+593 00 000 0000</code>, <code>0962900000</code> o <code>096 292 0000</code>.</p>
-                </div>
-                ` : ''}
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-1">Descripción / Evidencia</label>
                     <textarea id="input-desc" rows="3" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none transition" placeholder="Detalles del trabajo o deuda..."></textarea>
@@ -1073,18 +1012,12 @@ const app = {
   saveReceivableContact() {
     const oldName = this.sanitizeEntityName(this.editingContactOriginalName || "");
     const newName = this.sanitizeEntityName(document.getElementById("input-contact-name")?.value || "");
-    const rawPhone = document.getElementById("input-contact-phone")?.value || "";
-    const normalizedPhone = this.normalizePhoneInput(rawPhone);
 
     if (!newName) {
       return this.showToast("El nombre del cliente es obligatorio", "error");
     }
 
-    if (normalizedPhone === null) {
-      return this.showToast("Numero de telefono invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
-    }
-
-    this.renameReceivableContact(oldName || newName, newName, normalizedPhone || "");
+    this.renameReceivableContact(oldName || newName, newName);
     this.saveData();
     this.closeModal();
     this.navigate(this.currentView);
@@ -1101,17 +1034,6 @@ const app = {
       newItem.name = this.sanitizeEntityName(document.getElementById("input-name").value);
       newItem.amount = document.getElementById("input-amount").value;
       newItem.desc = document.getElementById("input-desc").value;
-      if (type === "receivables") {
-        const phoneInputValue = document.getElementById("input-phone")?.value || "";
-        const fallbackPhone = this.getGroupPhone(newItem.name, type) || "";
-        const normalizedPhone = this.normalizePhoneInput(phoneInputValue || fallbackPhone);
-        if (normalizedPhone === null) {
-          return this.showToast("Numero de telefono invalido. Usa por ejemplo +593 00 000 0000 o 0962900000", "error");
-        }
-        if (normalizedPhone) {
-          newItem.phone = normalizedPhone;
-        }
-      }
       if (!newItem.name || !newItem.amount)
         return this.showToast("Nombre y monto requeridos");
     } else if (type === "classes") {
@@ -1137,7 +1059,7 @@ const app = {
         newItem.date = this.data[type][this.editingIndex].date; // Keep original date
         this.data[type][this.editingIndex] = newItem;
         if (type === "receivables") {
-          this.renameReceivableContact(previousItem.name, newItem.name, newItem.phone || "");
+          this.renameReceivableContact(previousItem.name, newItem.name);
         }
         this.showToast("Registro actualizado");
         this.editingIndex = null;
@@ -1145,7 +1067,7 @@ const app = {
         // Create new
         this.data[type].push(newItem);
         if (type === "receivables") {
-          this.upsertReceivableContact(newItem.name, newItem.phone || "");
+          this.upsertReceivableContact(newItem.name);
         }
         this.showToast("Registro guardado correctamente");
     }
@@ -1167,7 +1089,6 @@ const app = {
       setTimeout(() => {
           if(document.getElementById("input-name")) document.getElementById("input-name").value = item.name || item.student || '';
           if(document.getElementById("input-amount")) document.getElementById("input-amount").value = item.amount || '';
-          if(document.getElementById("input-phone")) document.getElementById("input-phone").value = item.phone || this.getGroupPhone(item.name || '', type) || '';
           if(document.getElementById("input-hours")) document.getElementById("input-hours").value = item.hours || '';
           if(document.getElementById("input-cost")) document.getElementById("input-cost").value = item.cost || '';
           if(document.getElementById("input-desc")) document.getElementById("input-desc").value = item.desc || '';
@@ -1362,41 +1283,6 @@ const app = {
     }).format(amount);
   },
 
-  normalizePhoneInput(value) {
-      const rawValue = String(value || "").trim();
-      if (!rawValue) {
-          return "";
-      }
-
-      const digits = rawValue.replace(/\D/g, "");
-      let normalizedDigits = "";
-
-      if (digits.startsWith("593") && digits.length === 12) {
-          normalizedDigits = digits;
-      } else if (digits.startsWith("0") && digits.length === 10) {
-          normalizedDigits = `593${digits.slice(1)}`;
-      } else if (digits.length === 9 && digits.startsWith("9")) {
-          normalizedDigits = `593${digits}`;
-      } else {
-          return null;
-      }
-
-      return `+${normalizedDigits.slice(0, 3)} ${normalizedDigits.slice(3, 5)} ${normalizedDigits.slice(5, 8)} ${normalizedDigits.slice(8)}`;
-  },
-
-  getGroupPhone(name, type) {
-      if (type === 'receivables') {
-          const contact = this.getReceivableContact(name);
-          if (contact && contact.phone) {
-              return contact.phone;
-          }
-      }
-
-      const groupItems = (this.data[type] || []).filter(item => (item.name || item.student || 'Desconocido') === name);
-      const itemWithPhone = groupItems.find(item => item.phone);
-      return itemWithPhone ? itemWithPhone.phone : '';
-  },
-
   buildGroupDetailsText(name, type) {
       const items = this.data[type].filter(i => ((i.name || i.student) === name) && !i.isNote);
       if (!items.length || !this.reportFormatter) return "";
@@ -1432,11 +1318,7 @@ const app = {
           newItem.name = name; // Use existing name
           newItem.amount = amount;
           if (type === 'receivables') {
-              const existingPhone = this.getGroupPhone(name, type);
-              if (existingPhone) {
-                  newItem.phone = existingPhone;
-              }
-              this.upsertReceivableContact(name, existingPhone || "");
+              this.upsertReceivableContact(name);
           }
       }
 
