@@ -53,6 +53,7 @@
       localStorage.removeItem("controlPagosData_v1");
       this.syncReceivableContacts();
       this.updateSidebarBalance();
+      return true;
     } catch (error) {
       console.error("No se pudieron cargar los datos", error);
       this.data = {
@@ -60,23 +61,53 @@
         classes: [], memberships: [], savings: [],
       };
       this.showToast(error.message || "Se requiere conexión", "error");
+      return false;
+    }
+  };
+
+  app.refreshVisibleData = async function () {
+    if (navigator.onLine === false || this._foregroundRefreshInProgress) return false;
+    const now = Date.now();
+    if (now - (this._lastForegroundRefreshAt || 0) < 1000) return false;
+    this._lastForegroundRefreshAt = now;
+    this._foregroundRefreshInProgress = true;
+    const previousData = clone(this.data);
+    const previousServerData = this._serverData ? clone(this._serverData) : null;
+    try {
+      await this._syncQueue.catch(() => undefined);
+      const loaded = await this.loadData();
+      if (loaded) this.navigate(this.currentView);
+      else {
+        this.data = previousData;
+        this._serverData = previousServerData;
+        this.updateSidebarBalance();
+      }
+      return loaded;
+    } finally {
+      this._foregroundRefreshInProgress = false;
     }
   };
 
   app.init = async function () {
-    await this.loadData();
     this.loadTheme();
-    this.navigate("dashboard");
-    this.updateOnlineStatus();
     const authMethod = document.querySelector('meta[name="auth-method"]')?.content || 'unknown';
-    window.MobileAuth?.initAuthenticatedPage(authMethod).catch((error) => {
+    const freshAuthentication = document.querySelector('meta[name="auth-fresh"]')?.content === 'true';
+    await window.MobileAuth?.initAuthenticatedPage(authMethod, freshAuthentication).catch((error) => {
       console.warn('No se pudo inicializar el acceso rápido', error);
     });
+    await this.loadData();
+    this.navigate("dashboard");
+    this.updateOnlineStatus();
+    this._lastForegroundRefreshAt = Date.now();
     window.addEventListener("online", () => {
       this.updateOnlineStatus();
       this.loadData().then(() => this.navigate(this.currentView));
     });
     window.addEventListener("offline", () => this.updateOnlineStatus());
+    window.addEventListener("focus", () => this.refreshVisibleData());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") this.refreshVisibleData();
+    });
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/service-worker.js").catch((error) => {
         console.warn("No se pudo registrar la PWA", error);

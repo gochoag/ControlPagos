@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#012E40" />
     <meta name="csrf-token" content="{{ csrf_token() }}" />
     <meta name="auth-method" content="{{ auth_method }}" />
+    <meta name="auth-fresh" content="{{ 'true' if fresh_authentication else 'false' }}" />
     <title>ControlPagos</title>
     <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -15,6 +16,15 @@
   <body
     class="bg-gray-900 text-gray-100 font-sans antialiased min-h-screen selection:bg-brand-500 selection:text-white"
   >
+    <section id="app-lock-screen" class="hidden fixed inset-0 z-[200] items-center justify-center bg-slate-950/95 p-6 text-center backdrop-blur-md">
+      <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-7 shadow-2xl">
+        <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-teal-500/15 text-2xl text-teal-300"><i class="fa-solid fa-fingerprint"></i></div>
+        <h1 class="mt-5 text-xl font-bold text-white">ControlPagos bloqueado</h1>
+        <p class="mt-2 text-sm text-slate-400">La aplicación estuvo inactiva. Desbloquéala con tu huella o el PIN del teléfono.</p>
+        <button id="app-unlock-btn" type="button" class="mt-6 w-full rounded-xl bg-teal-600 px-4 py-3 font-semibold text-white hover:bg-teal-500">Desbloquear</button>
+        <p id="app-unlock-error" class="hidden mt-3 text-sm text-rose-300"></p>
+      </div>
+    </section>
     <div id="offline-banner" class="hidden fixed top-0 inset-x-0 z-[100] bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-slate-950">
       Sin conexión. La consulta y edición de datos están desactivadas.
     </div>

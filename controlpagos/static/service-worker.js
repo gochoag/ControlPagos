@@ -1,4 +1,4 @@
-const CACHE_NAME = "controlpagos-shell-v5";
+const CACHE_NAME = "controlpagos-shell-v6";
 const SHELL_FILES = [
   "/offline.html",
   "/static/images/favicon.svg",

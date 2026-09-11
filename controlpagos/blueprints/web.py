@@ -9,7 +9,15 @@ web_bp = Blueprint("web", __name__)
 @web_bp.get("/")
 @login_required
 def index():
-    return render_template("index.html", auth_method=session.get("auth_method", "unknown"))
+    fresh_authentication = bool(
+        session.pop("fresh_password_login", False)
+        or session.pop("fresh_device_login", False)
+    )
+    return render_template(
+        "index.html",
+        auth_method=session.get("auth_method", "unknown"),
+        fresh_authentication=fresh_authentication,
+    )
 
 
 @web_bp.get("/manifest.webmanifest")

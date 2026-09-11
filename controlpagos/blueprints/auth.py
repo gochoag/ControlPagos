@@ -32,8 +32,10 @@ def login():
     if not user or not check_password_hash(user.password_hash, password):
         return render_template("login.html", error="Usuario o contraseña incorrectos"), 401
     session.clear()
+    session.permanent = True
     session["user_id"] = user.id
     session["auth_method"] = "password"
+    session["fresh_password_login"] = True
     csrf_token()
     next_url = request.args.get("next", "")
     return redirect(next_url if next_url.startswith("/") and not next_url.startswith("//") else url_for("web.index"))
@@ -90,8 +92,10 @@ def device_login():
     credential.last_used_at = utc_now()
     db.session.commit()
     session.clear()
+    session.permanent = True
     session["user_id"] = credential.user_id
     session["auth_method"] = "device"
+    session["fresh_device_login"] = True
     return jsonify(success=True, redirect=url_for("web.index"), csrfToken=csrf_token())
 
 

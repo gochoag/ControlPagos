@@ -94,6 +94,22 @@ def test_login_cookie_and_csrf_protection(client):
     assert created.get_json()["amount"] == "1.25"
 
 
+def test_password_login_creates_a_persistent_session_and_marks_it_fresh(client):
+    token = csrf_from_html(client.get("/login"))
+    client.post(
+        "/login",
+        data={"username": "alex", "password": "correcta", "csrf_token": token},
+    )
+    with client.session_transaction() as active_session:
+        assert active_session.permanent is True
+        assert active_session["fresh_password_login"] is True
+
+    first_page = client.get("/")
+    assert b'name="auth-fresh" content="true"' in first_page.data
+    second_page = client.get("/")
+    assert b'name="auth-fresh" content="false"' in second_page.data
+
+
 def test_device_credential_login_stores_only_hash(client, application):
     token = login(client)
     registered = client.post(

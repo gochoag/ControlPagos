@@ -112,6 +112,16 @@ test('mobile login supports device authentication without storing a password', (
   expect(source).not.toContain("secureSet('password'");
 });
 
+test('Android refreshes data on return and locks only after inactivity', () => {
+  const apiSource = fs.readFileSync(apiPath, 'utf8');
+  const mobileSource = fs.readFileSync(path.join(staticRoot, 'js', 'mobile', 'mobile-auth.js'), 'utf8');
+  expect(apiSource).toContain('refreshVisibleData');
+  expect(apiSource).toContain('visibilitychange');
+  expect(mobileSource).toContain('INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000');
+  expect(mobileSource).toContain("document.getElementById('device-login-area')?.classList.add('hidden')");
+  expect(mobileSource).not.toContain('setTimeout(loginWithDevice');
+});
+
 test('the invisible toast never captures taps over Android navigation', () => {
   const css = fs.readFileSync(path.join(staticRoot, 'css', 'source.css'), 'utf8');
   expect(css).toContain('#toast { pointer-events: none; }');
