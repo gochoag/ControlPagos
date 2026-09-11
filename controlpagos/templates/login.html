@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#012E40">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Ingresar | ControlPagos</title>
+    <link rel="icon" href="/static/images/favicon.svg">
+    <link rel="stylesheet" href="/static/css/style.css">
+  </head>
+  <body class="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
+    <main class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-7 shadow-2xl">
+      <h1 class="text-2xl font-bold">ControlPagos</h1>
+      <p class="mt-1 text-sm text-slate-400">Ingresa para consultar tus datos.</p>
+      {% if error %}
+      <p class="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-300">{{ error }}</p>
+      {% endif %}
+      <form method="post" class="mt-6 space-y-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="block text-sm text-slate-300">Usuario
+          <input name="username" autocomplete="username" required autofocus class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-teal-400">
+        </label>
+        <label class="block text-sm text-slate-300">Contraseña
+          <input type="password" name="password" autocomplete="current-password" required class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-teal-400">
+        </label>
+        <button class="w-full rounded-lg bg-teal-600 px-4 py-3 font-semibold hover:bg-teal-500">Ingresar</button>
+      </form>
+      <div id="device-login-area" class="hidden mt-5 border-t border-slate-700 pt-5">
+        <button id="device-login-btn" type="button" class="w-full rounded-lg border border-teal-500/50 px-4 py-3 font-semibold text-teal-300 disabled:opacity-50">
+          <i class="fa-solid fa-fingerprint mr-2"></i>Entrar con huella o PIN
+        </button>
+        <p id="device-login-error" class="hidden mt-3 text-sm text-rose-300"></p>
+      </div>
+    </main>
+    <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
+    <script src="/static/js/mobile/native-bridge.js"></script>
+    <script src="/static/js/mobile/mobile-auth.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => window.MobileAuth?.initLoginPage());</script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "appId": "com.controlpagos.app",
+  "appName": "ControlPagos",
+  "webDir": "www",
+  "server": {
+    "url": "http://localhost:5000",
+    "cleartext": true
+  }
+}

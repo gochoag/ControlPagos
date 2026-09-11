@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#012E40" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <meta name="auth-method" content="{{ auth_method }}" />
+    <title>ControlPagos</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/favicon.svg">
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body
+    class="bg-gray-900 text-gray-100 font-sans antialiased min-h-screen selection:bg-brand-500 selection:text-white"
+  >
+    <div id="offline-banner" class="hidden fixed top-0 inset-x-0 z-[100] bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-slate-950">
+      Sin conexión. La consulta y edición de datos están desactivadas.
+    </div>
+    <div class="flex h-screen overflow-hidden">
+      <!-- Sidebar -->
+      <aside
+        id="sidebar"
+        class="w-64 bg-gray-800/50 backdrop-blur-xl border-r border-gray-700/50 hidden md:flex flex-col transition-all duration-300"
+      >
+        <div class="p-6 flex items-center justify-between shrink-0">
+          <h1
+            class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
+          >
+            <i class="fa-solid fa-wallet mr-2 text-blue-400"></i>ControlPagos
+          </h1>
+        </div>
+
+        <!-- Scrollable section: nav + data management -->
+        <div class="flex-1 overflow-y-auto">
+
+        <nav class="px-4 space-y-2 mt-4">
+          <button
+            onclick="app.navigate('dashboard')"
+            id="nav-dashboard"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-chart-pie w-5"></i>
+            <span>Resumen</span>
+          </button>
+          <button
+            onclick="app.navigate('receivables')"
+            id="nav-receivables"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-hand-holding-dollar w-5"></i>
+            <span>Por Cobrar (Deben)</span>
+          </button>
+          <button
+            onclick="app.navigate('payables')"
+            id="nav-payables"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-money-bill-transfer w-5"></i>
+            <span>Por Pagar (Debo)</span>
+          </button>
+          <button
+            onclick="app.navigate('classes')"
+            id="nav-classes"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-chalkboard-user w-5"></i>
+            <span>Horas Clases</span>
+          </button>
+          <button
+            onclick="app.navigate('savings')"
+            id="nav-savings"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-piggy-bank w-5"></i>
+            <span>Ahorros</span>
+          </button>
+          <button
+            onclick="app.navigate('memberships')"
+            id="nav-memberships"
+            class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-300 hover:text-white"
+          >
+            <i class="fa-solid fa-id-card w-5"></i>
+            <span>Membresías</span>
+          </button>
+        </nav>
+
+        <!-- Data Management -->
+        <div class="px-4 mb-2 mt-4 border-t border-gray-700/30 pt-4">
+             <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Datos</p>
+            <div class="mb-1">
+              <button
+                id="backup-menu-btn"
+                onclick="toggleBackupMenu()"
+                class="w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm group"
+              >
+                <span class="flex items-center space-x-3">
+                  <i class="fa-solid fa-database w-5 group-hover:scale-110 transition-transform"></i>
+                  <span>Respaldos JSON</span>
+                </span>
+                <i id="backup-chevron" class="fa-solid fa-chevron-down text-xs transition-transform"></i>
+              </button>
+              <div id="backup-actions" class="hidden mt-2 ml-8 space-y-1">
+                <button onclick="app.downloadBackup(); app.closeBackupMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
+                  Exportar JSON
+                </button>
+                <button onclick="app.downloadDatabaseBackup(); app.closeBackupMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
+                  Copiar base SQLite
+                </button>
+                <label class="w-full block text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm cursor-pointer">
+                  Restaurar
+                  <input type="file" class="hidden" onchange="app.restoreBackup(this); app.closeBackupMenu()" accept=".json">
+                </label>
+              </div>
+            </div>
+            <button data-mobile-auth class="hidden w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm"></button>
+        </div>
+
+        <div class="p-4 border-t border-gray-700/50">
+          <div
+            class="bg-gradient-to-br from-indigo-600/20 to-purple-600/20 rounded-xl p-4 border border-indigo-500/20"
+          >
+            <p class="text-xs text-indigo-300 mb-1">Balance Total</p>
+            <h3 id="sidebar-balance" class="text-xl font-bold text-white">
+              $ 0.00
+            </h3>
+          </div>
+        </div>
+
+        </div><!-- end scrollable -->
+      </aside>
+
+      <!-- Main Content -->
+      <main
+        class="flex-1 overflow-y-auto relative bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800"
+      >
+        <!-- Desktop + Mobile Header -->
+        <div
+          class="app-header flex items-center justify-between p-4 bg-gray-800/80 backdrop-blur-md border-b border-gray-700/50 sticky top-0 z-20"
+        >
+          <!-- Left: hamburger + title (mobile) -->
+          <div class="flex items-center space-x-3">
+            <button
+              id="sidebar-toggle"
+              onclick="toggleSidebar()"
+              class="hidden md:inline-flex p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+              title="Mostrar/Ocultar menú"
+            >
+              <i class="fa-solid fa-bars text-xl"></i>
+            </button>
+            <h1 class="text-xl font-bold text-white md:hidden"><span class="text-brand-400">Control</span>Pagos</h1>
+          </div>
+
+          <form method="post" action="/logout" class="ml-auto mr-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10" title="Cerrar sesión">
+              <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+          </form>
+
+          <!-- Right: Theme dropdown -->
+          <div class="relative">
+            <button
+              id="theme-dropdown-btn"
+              onclick="toggleThemeDropdown()"
+              class="flex items-center space-x-2 px-3 py-2 rounded-xl bg-gray-700/60 hover:bg-gray-700 border border-gray-600/50 text-gray-300 hover:text-white transition-all text-sm"
+            >
+              <i class="fa-solid fa-palette text-brand-500"></i>
+              <span id="current-theme-name" class="hidden sm:inline">Green Cascade</span>
+              <i class="fa-solid fa-chevron-down text-xs transition-transform" id="theme-chevron"></i>
+            </button>
+            <!-- Dropdown -->
+            <div
+              id="theme-dropdown"
+              class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-30"
+            >
+              <button onclick="app.setTheme(0); toggleThemeDropdown()" id="theme-opt-0" class="theme-option w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition">
+                <span class="w-3 h-3 rounded-full bg-teal-400 shrink-0"></span>
+                <span>Green Cascade</span>
+              </button>
+              <button onclick="app.setTheme(1); toggleThemeDropdown()" id="theme-opt-1" class="theme-option w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition">
+                <span class="w-3 h-3 rounded-full bg-violet-500 shrink-0"></span>
+                <span>Deep Purple</span>
+              </button>
+              <button onclick="app.setTheme(2); toggleThemeDropdown()" id="theme-opt-2" class="theme-option w-full flex items-center space-x-3 px-4 py-3 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition">
+                <span class="w-3 h-3 rounded-full bg-indigo-500 shrink-0"></span>
+                <span>Midnight Blue</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Mobile Menu Dropdown -->
+        <div
+          id="mobile-menu"
+          class="hidden md:hidden bg-gray-800 border-b border-gray-700 absolute w-full z-10"
+        >
+          <button
+            onclick="app.navigate('dashboard'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Resumen
+          </button>
+          <button
+            onclick="app.navigate('receivables'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Por Cobrar
+          </button>
+          <button
+            onclick="app.navigate('payables'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Por Pagar
+          </button>
+          <button
+            onclick="app.navigate('classes'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            Clases
+          </button>
+          <button
+            onclick="app.navigate('memberships'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            <i class="fa-solid fa-id-card w-7 text-brand-400"></i>Membresías
+          </button>
+          <button
+            onclick="app.navigate('savings'); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            <i class="fa-solid fa-piggy-bank w-7 text-brand-400"></i>Ahorros
+          </button>
+          <button
+            onclick="app.downloadBackup(); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5 border-t border-gray-700"
+          >
+            <i class="fa-solid fa-file-code w-7 text-brand-400"></i>Exportar JSON
+          </button>
+          <button
+            onclick="app.downloadDatabaseBackup(); toggleMobileMenu()"
+            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
+          >
+            <i class="fa-solid fa-database w-7 text-brand-400"></i>Copiar base SQLite
+          </button>
+          <label class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5 cursor-pointer">
+            <i class="fa-solid fa-upload w-7 text-brand-400"></i>Restaurar JSON
+            <input type="file" class="hidden" onchange="app.restoreBackup(this); toggleMobileMenu()" accept="application/json,.json">
+          </label>
+          <button data-mobile-auth class="hidden w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5 border-t border-gray-700"></button>
+        </div>
+
+        <div class="p-6 md:p-10 max-w-7xl mx-auto space-y-8" id="main-view">
+          <!-- Content injected by JS -->
+        </div>
+
+        <nav class="mobile-bottom-nav" aria-label="Navegación principal">
+          <button id="mobile-nav-dashboard" class="mobile-nav-item" onclick="app.navigate('dashboard')"><i class="fa-solid fa-chart-pie"></i><span>Resumen</span></button>
+          <button id="mobile-nav-receivables" class="mobile-nav-item" onclick="app.navigate('receivables')"><i class="fa-solid fa-hand-holding-dollar"></i><span>Cobrar</span></button>
+          <button id="mobile-nav-payables" class="mobile-nav-item" onclick="app.navigate('payables')"><i class="fa-solid fa-money-bill-transfer"></i><span>Pagar</span></button>
+          <button id="mobile-nav-classes" class="mobile-nav-item" onclick="app.navigate('classes')"><i class="fa-solid fa-clock"></i><span>Clases</span></button>
+          <button id="mobile-more-btn" class="mobile-nav-item" onclick="toggleMoreMenu()"><i class="fa-solid fa-ellipsis"></i><span>Más</span></button>
+        </nav>
+      </main>
+    </div>
+
+    <!-- Modals -->
+    <div
+      id="modal-container"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg transform transition-all scale-100 overflow-hidden"
+        id="modal-content"
+      >
+        <!-- Modal Header -->
+        <div
+          class="flex justify-between items-center p-5 border-b border-gray-700/50 bg-gray-800/50"
+        >
+          <h3 id="modal-title" class="text-xl font-semibold text-white">
+            Nuevo Registro
+          </h3>
+          <button
+            onclick="app.closeModal()"
+            class="text-gray-400 hover:text-white transition-colors"
+          >
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+        <!-- Modal Body -->
+        <div id="modal-body" class="p-6 space-y-4">
+          <!-- Dynamic Form -->
+        </div>
+        <!-- Modal Footer -->
+        <div
+          class="p-5 border-t border-gray-700/50 bg-gray-800/50 flex justify-end space-x-3"
+        >
+          <button
+            onclick="app.closeModal()"
+            class="px-4 py-2 rounded-lg text-gray-300 hover:bg-white/5 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            id="modal-save-btn"
+            class="px-6 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-medium shadow-lg shadow-brand-500/20 transition-all transform active:scale-95"
+          >
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div
+      id="confirm-modal"
+      class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4 transition-all duration-300"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 opacity-0 transition-all duration-300"
+        id="confirm-modal-content"
+      >
+        <div class="p-6 text-center">
+          <div
+            class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4"
+          >
+            <i
+              class="fa-solid fa-triangle-exclamation text-3xl text-rose-500"
+            ></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-2">¿Estás seguro?</h3>
+          <p class="text-gray-400 text-sm mb-6">
+            Esta acción eliminará el registro permanentemente.
+          </p>
+          <div class="flex space-x-3 justify-center">
+            <button
+              onclick="app.closeConfirmModal()"
+              class="px-5 py-2.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-white font-medium transition"
+            >
+              Cancelar
+            </button>
+            <button
+              id="confirm-delete-btn"
+              class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-lg shadow-rose-500/20 transition"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div
+      id="toast"
+      class="fixed bottom-6 right-6 transform transition-all duration-300 translate-y-20 opacity-0 z-50"
+    >
+      <div
+        class="bg-gray-800 border border-gray-700 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3"
+      >
+        <i class="fa-solid fa-circle-check text-emerald-400 text-xl"></i>
+        <span id="toast-message">Operación exitosa</span>
+      </div>
+    </div>
+
+    <script src="/static/js/mobile/native-bridge.js"></script>
+    <script src="/static/js/domain/reportFormatter.js"></script>
+    <script src="/static/js/domain/receivableData.js"></script>
+    <script src="/static/js/core/app.js"></script>
+    <script src="/static/js/core/api.js"></script>
+    <script src="/static/js/mobile/mobile-auth.js"></script>
+    <script src="/static/js/ui/navigation.js"></script>
+  </body>
+</html>

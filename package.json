@@ -1,10 +1,10 @@
 {
   "name": "controlpagos",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "test": "bun test",
-    "start": "bun server.js"
+    "build:css": "tailwindcss -c tailwind.config.cjs -i controlpagos/static/css/source.css -o controlpagos/static/css/style.css --minify",
+    "test:js": "bun test",
+    "start": "python -m flask --app wsgi run --debug"
   },
   "repository": {
     "type": "git",
@@ -18,7 +18,9 @@
   },
   "homepage": "https://github.com/gochoag/ControlPagos#readme",
   "description": "",
-  "dependencies": {
-    "dotenv": "^16.6.1"
+  "dependencies": {},
+  "devDependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "tailwindcss": "^3.4.17"
   }
 }
