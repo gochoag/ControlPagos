@@ -65,10 +65,10 @@
     }
   };
 
-  app.refreshVisibleData = async function () {
+  app.refreshVisibleData = async function ({ force = false, notify = false } = {}) {
     if (navigator.onLine === false || this._foregroundRefreshInProgress) return false;
     const now = Date.now();
-    if (now - (this._lastForegroundRefreshAt || 0) < 1000) return false;
+    if (!force && now - (this._lastForegroundRefreshAt || 0) < 1000) return false;
     this._lastForegroundRefreshAt = now;
     this._foregroundRefreshInProgress = true;
     const previousData = clone(this.data);
@@ -76,7 +76,10 @@
     try {
       await this._syncQueue.catch(() => undefined);
       const loaded = await this.loadData();
-      if (loaded) this.navigate(this.currentView);
+      if (loaded) {
+        this.navigate(this.currentView);
+        if (notify) this.showToast("Datos actualizados");
+      }
       else {
         this.data = previousData;
         this._serverData = previousServerData;
@@ -86,6 +89,73 @@
     } finally {
       this._foregroundRefreshInProgress = false;
     }
+  };
+
+  app.setupPullToRefresh = function () {
+    const container = document.getElementById("app-scroll-container");
+    const indicator = document.getElementById("pull-refresh-indicator");
+    if (!container || !indicator || container.dataset.pullRefreshReady) return;
+    container.dataset.pullRefreshReady = "true";
+
+    const threshold = 72;
+    const maximum = 108;
+    let startY = 0;
+    let distance = 0;
+    let pulling = false;
+    let refreshing = false;
+
+    const reset = () => {
+      distance = 0;
+      pulling = false;
+      indicator.style.setProperty("--pull-distance", "0px");
+      indicator.classList.remove("is-visible", "is-ready", "is-loading");
+      indicator.querySelector("i")?.classList.replace("fa-arrows-rotate", "fa-arrow-down");
+    };
+
+    const updateIndicator = () => {
+      indicator.style.setProperty("--pull-distance", `${distance}px`);
+      indicator.classList.toggle("is-visible", distance > 8);
+      indicator.classList.toggle("is-ready", distance >= threshold);
+    };
+
+    container.addEventListener("touchstart", (event) => {
+      if (refreshing || container.scrollTop > 0 || event.touches.length !== 1) return;
+      startY = event.touches[0].clientY;
+      distance = 0;
+      pulling = true;
+    }, { passive: true });
+
+    container.addEventListener("touchmove", (event) => {
+      if (!pulling || refreshing) return;
+      const delta = event.touches[0].clientY - startY;
+      if (delta <= 0) {
+        reset();
+        return;
+      }
+      distance = Math.min(maximum, Math.round(delta * 0.52));
+      updateIndicator();
+      if (event.cancelable) event.preventDefault();
+    }, { passive: false });
+
+    const finishPull = async () => {
+      if (!pulling || refreshing) return;
+      if (distance < threshold) {
+        reset();
+        return;
+      }
+      refreshing = true;
+      pulling = false;
+      indicator.classList.remove("is-ready");
+      indicator.classList.add("is-visible", "is-loading");
+      indicator.style.setProperty("--pull-distance", "0px");
+      indicator.querySelector("i")?.classList.replace("fa-arrow-down", "fa-arrows-rotate");
+      await this.refreshVisibleData({ force: true, notify: true });
+      refreshing = false;
+      reset();
+    };
+
+    container.addEventListener("touchend", finishPull, { passive: true });
+    container.addEventListener("touchcancel", reset, { passive: true });
   };
 
   app.init = async function () {
@@ -108,6 +178,7 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") this.refreshVisibleData();
     });
+    this.setupPullToRefresh();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/service-worker.js").catch((error) => {
         console.warn("No se pudo registrar la PWA", error);

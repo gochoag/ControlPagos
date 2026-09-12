@@ -46,6 +46,38 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+#app-scroll-container { overscroll-behavior-y: contain; }
+.app-header { z-index: 60; isolation: isolate; }
+
+.pull-refresh-indicator {
+  --pull-distance: 0px;
+  position: absolute;
+  z-index: 55;
+  top: 4.75rem;
+  left: 50%;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-bg-800) 92%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  color: var(--theme-accent-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(-4rem + var(--pull-distance))) scale(0.82);
+  transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.pull-refresh-indicator.is-visible { opacity: 1; }
+.pull-refresh-indicator.is-ready { background: var(--theme-accent); color: var(--theme-bg-900); }
+.pull-refresh-indicator.is-loading { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.pull-refresh-indicator.is-loading i { animation: pull-refresh-spin 700ms linear infinite; }
+
+@keyframes pull-refresh-spin { to { transform: rotate(360deg); } }
+
 button,
 input,
 textarea,
@@ -121,17 +153,41 @@ input:-webkit-autofill:active {
   .add-record-btn { width: 100%; justify-content: center; min-height: 3rem; }
 
   .group-header {
+    position: relative;
     align-items: flex-start;
     flex-direction: column;
     gap: 0.85rem;
     padding: 1rem;
+    padding-right: 3.8rem;
   }
 
   .group-identity { width: 100%; }
   .group-summary { width: 100%; justify-content: space-between; }
   .group-tools { gap: 0.35rem; }
   .group-tools > span { width: 2.4rem; height: 2.4rem; }
+  .group-delete {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.65rem;
+    margin: 0;
+    border: 1px solid rgba(251, 113, 133, 0.28);
+    background: rgba(244, 63, 94, 0.1);
+    color: #fda4af;
+  }
+  .group-header:hover .group-delete { background: rgba(244, 63, 94, 0.14); }
   .record-actions { opacity: 1 !important; }
+  .record-row { padding-right: 2.75rem; }
+  .record-actions .record-delete,
+  .record-row > div:last-child > .record-delete {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    min-width: 2.15rem;
+    min-height: 2.15rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+  }
 
   .inline-entry { grid-template-columns: 7rem minmax(0, 1fr); display: grid; }
   .inline-entry input:first-of-type { width: 100%; }

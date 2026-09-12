@@ -122,6 +122,23 @@ test('Android refreshes data on return and locks only after inactivity', () => {
   expect(mobileSource).not.toContain('setTimeout(loginWithDevice');
 });
 
+test('mobile has pull to refresh, keeps the header above cards, and uses the web launcher icon', () => {
+  const apiSource = fs.readFileSync(apiPath, 'utf8');
+  const appSource = fs.readFileSync(appPath, 'utf8');
+  const html = fs.readFileSync(path.join(projectRoot, 'controlpagos', 'templates', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(staticRoot, 'css', 'source.css'), 'utf8');
+  const manifest = fs.readFileSync(path.join(projectRoot, 'mobile', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+  const launcher = fs.readFileSync(path.join(projectRoot, 'mobile', 'android', 'app', 'src', 'main', 'res', 'drawable', 'ic_controlpagos_launcher.xml'), 'utf8');
+  expect(apiSource).toContain('setupPullToRefresh');
+  expect(apiSource).toContain('const threshold = 72');
+  expect(html).toContain('id="pull-refresh-indicator"');
+  expect(css).toContain('.app-header { z-index: 60; isolation: isolate; }');
+  expect(appSource).toContain('group-delete');
+  expect(manifest).toContain('@drawable/ic_controlpagos_launcher');
+  expect(launcher).toContain('#3CA6A6');
+  expect(launcher).toContain('#012E40');
+});
+
 test('the invisible toast never captures taps over Android navigation', () => {
   const css = fs.readFileSync(path.join(staticRoot, 'css', 'source.css'), 'utf8');
   expect(css).toContain('#toast { pointer-events: none; }');

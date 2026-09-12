@@ -417,7 +417,7 @@ const app = {
                     : 'fa-solid fa-fire';
                 
                 html += `
-                <div class="group-card bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden mb-4 shadow-lg shadow-black/20">
+                <div class="group-card relative z-0 bg-gray-800 border border-gray-700 rounded-2xl overflow-hidden mb-4 shadow-lg shadow-black/20">
                     <!-- Header -->
                     <button onclick="app.toggleAccordion('${cleanId}')" class="group-header w-full flex items-center justify-between p-5 bg-gradient-to-r from-gray-800 to-gray-800/50 hover:from-gray-700 hover:to-gray-700/50 transition-all duration-300 text-left group border-b border-transparent hover:border-gray-600">
                         <div class="group-identity flex items-center space-x-4">
@@ -434,16 +434,16 @@ const app = {
                                 ${type === 'classes' ? group.total + ' hrs' : this.formatMoney(group.total)}
                             </span>
                              <span class="group-tools flex items-center">${showEditContactAction ? `
-                             <span onclick="event.stopPropagation(); app.openReceivableContactModal('${escapedKey}')" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-sky-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="Editar cliente">
+                             <span onclick="event.stopPropagation(); app.openReceivableContactModal('${escapedKey}')" class="group-edit w-8 h-8 rounded-full bg-gray-700 hover:bg-sky-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2" title="Editar cliente">
                                 <i class="fa-solid fa-user-pen"></i>
                              </span>
                              ` : ''}
                              <!-- Copy Button -->
-                             <span onclick="event.stopPropagation(); app.copyGroupDetails('${escapedKey}', '${type}')" class="w-8 h-8 rounded-full ${hasDebt ? 'bg-gray-700 hover:bg-brand-600 text-gray-300 hover:text-white' : 'bg-gray-700 text-gray-500'} flex items-center justify-center transition-colors mr-2 z-20" title="${hasDebt ? 'Copiar detalle' : 'No hay deuda pendiente para copiar'}">
+                             <span onclick="event.stopPropagation(); app.copyGroupDetails('${escapedKey}', '${type}')" class="group-copy w-8 h-8 rounded-full ${hasDebt ? 'bg-gray-700 hover:bg-brand-600 text-gray-300 hover:text-white' : 'bg-gray-700 text-gray-500'} flex items-center justify-center transition-colors mr-2" title="${hasDebt ? 'Copiar detalle' : 'No hay deuda pendiente para copiar'}">
                                 <i class="fa-regular fa-copy"></i>
                              </span>
                              <!-- Delete Group Button -->
-                             <span onclick="event.stopPropagation(); ${deleteAction}" class="w-8 h-8 rounded-full bg-gray-700 hover:bg-rose-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2 z-20" title="${deleteTitle}">
+                             <span onclick="event.stopPropagation(); ${deleteAction}" class="group-delete w-8 h-8 rounded-full bg-gray-700 hover:bg-rose-600 flex items-center justify-center text-gray-300 hover:text-white transition-colors mr-2" title="${deleteTitle}">
                                 <i class="${deleteIcon}"></i>
                              </span>
                              </span>
@@ -461,7 +461,7 @@ const app = {
                     if (subItem.isNote) {
                         // NOTE RENDER
                         html += `
-                        <div class="flex justify-between items-start p-3 m-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20 hover:bg-yellow-500/20 transition group/item">
+                        <div class="record-row relative flex justify-between items-start p-3 m-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20 hover:bg-yellow-500/20 transition group/item">
                             <div class="flex-1">
                                 <span class="text-[10px] font-bold text-yellow-500 uppercase tracking-wider mb-1 block"><i class="fa-regular fa-note-sticky mr-1"></i> Nota</span>
                                 <p class="text-yellow-200/90 text-sm whitespace-pre-wrap italic">"${subItem.desc}"</p>
@@ -471,7 +471,7 @@ const app = {
                                 <button onclick="app.editItem('${type}', ${subItem.originalIndex})" class="text-yellow-500 hover:text-white transition text-xs flex items-center bg-yellow-500/10 hover:bg-yellow-500 px-2 py-1 rounded" title="Editar Nota">
                                     <i class="fa-solid fa-pencil"></i>
                                 </button>
-                                <button onclick="app.deleteItem('${type}', ${subItem.originalIndex})" class="text-yellow-500 hover:text-white transition text-xs flex items-center bg-yellow-500/10 hover:bg-rose-500 px-2 py-1 rounded">
+                                <button onclick="app.deleteItem('${type}', ${subItem.originalIndex})" class="record-delete text-yellow-500 hover:text-white transition text-xs flex items-center bg-yellow-500/10 hover:bg-rose-500 px-2 py-1 rounded">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             </div>
@@ -480,7 +480,7 @@ const app = {
                     } else {
                         // STANDARD ITEM RENDER
                         html += `
-                        <div class="flex justify-between items-start p-3 rounded-lg hover:bg-white/5 transition group/item">
+                        <div class="record-row relative flex justify-between items-start p-3 rounded-lg hover:bg-white/5 transition group/item">
                             <div class="flex-1">
                                 <p class="text-gray-300 text-sm whitespace-pre-wrap">${subItem.desc || 'Sin descripción'}</p>
                                 <span class="text-xs text-gray-500 mt-1 block">${new Date(subItem.date).toLocaleDateString()} &bull; ${new Date(subItem.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -493,7 +493,7 @@ const app = {
                                     <button onclick="app.editItem('${type}', ${subItem.originalIndex})" class="text-brand-400 hover:text-white text-xs flex items-center bg-brand-500/10 hover:bg-brand-500 px-2 py-1 rounded" title="Editar">
                                         <i class="fa-solid fa-pencil"></i>
                                     </button>
-                                    <button onclick="app.deleteItem('${type}', ${subItem.originalIndex})" class="text-rose-500 hover:text-white text-xs flex items-center bg-rose-500/10 hover:bg-rose-500 px-2 py-1 rounded" title="Borrar">
+                                    <button onclick="app.deleteItem('${type}', ${subItem.originalIndex})" class="record-delete text-rose-500 hover:text-white text-xs flex items-center bg-rose-500/10 hover:bg-rose-500 px-2 py-1 rounded" title="Borrar">
                                         <i class="fa-solid fa-trash-can"></i>
                                     </button>
                                 </div>

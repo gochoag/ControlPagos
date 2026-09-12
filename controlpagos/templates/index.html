@@ -143,11 +143,12 @@
 
       <!-- Main Content -->
       <main
+        id="app-scroll-container"
         class="flex-1 overflow-y-auto relative bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800"
       >
         <!-- Desktop + Mobile Header -->
         <div
-          class="app-header flex items-center justify-between p-4 bg-gray-800/80 backdrop-blur-md border-b border-gray-700/50 sticky top-0 z-20"
+          class="app-header flex items-center justify-between p-4 bg-gray-800/80 backdrop-blur-md border-b border-gray-700/50 sticky top-0 z-[60] isolate"
         >
           <!-- Left: hamburger + title (mobile) -->
           <div class="flex items-center space-x-3">
@@ -199,6 +200,9 @@
               </button>
             </div>
           </div>
+        </div>
+        <div id="pull-refresh-indicator" class="pull-refresh-indicator" role="status" aria-live="polite" aria-label="Actualizar datos">
+          <i class="fa-solid fa-arrow-down"></i>
         </div>
         <!-- Mobile Menu Dropdown -->
         <div
