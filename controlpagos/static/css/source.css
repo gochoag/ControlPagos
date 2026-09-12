@@ -169,7 +169,6 @@ input:-webkit-autofill:active {
     flex-direction: column;
     justify-content: flex-start;
     gap: 0.85rem;
-    min-height: 10.25rem;
     padding: 1rem;
     padding-right: 3.8rem;
   }
