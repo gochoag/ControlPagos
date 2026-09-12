@@ -147,8 +147,9 @@ test('mobile groups keep actions on the edge and refresh without a success toast
   expect(apiSource).not.toContain('Datos actualizados');
   expect(appSource).toContain('window.matchMedia');
   expect(css).toContain('.group-summary > .fa-chevron-down');
-  expect(css).toContain('.group-edit { top: 6.25rem; }');
-  expect(css).toContain('.group-copy { top: 9.1rem; }');
+  expect(css).toContain('.group-edit { top: 5.35rem; right: 6.15rem; }');
+  expect(css).toContain('.group-copy { top: 5.35rem; right: 3.4rem; }');
+  expect(css).toContain('top: 5.85rem;');
   expect(html).not.toContain("app.navigate('dashboard'); toggleMobileMenu()");
   expect(html).not.toContain("app.navigate('receivables'); toggleMobileMenu()");
 });
