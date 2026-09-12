@@ -1,21 +1,21 @@
-const CACHE_NAME = "controlpagos-shell-v9";
+const CACHE_NAME = "controlpagos-shell";
 const SHELL_FILES = [
   "/offline.html",
   "/static/images/favicon.svg",
   "/static/images/icon-192.png",
   "/static/images/icon-512.png",
   "/manifest.webmanifest",
-  "/static/css/style.css?v=9",
+  "/static/css/style.css",
   "/static/vendor/fontawesome/css/all.min.css",
   "/static/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "/static/vendor/fontawesome/webfonts/fa-regular-400.woff2",
-  "/static/js/domain/reportFormatter.js?v=9",
-  "/static/js/domain/receivableData.js?v=9",
-  "/static/js/core/app.js?v=9",
-  "/static/js/core/api.js?v=9",
-  "/static/js/mobile/native-bridge.js?v=9",
-  "/static/js/mobile/mobile-auth.js?v=9",
-  "/static/js/ui/navigation.js?v=9"
+  "/static/js/domain/reportFormatter.js",
+  "/static/js/domain/receivableData.js",
+  "/static/js/core/app.js",
+  "/static/js/core/api.js",
+  "/static/js/mobile/native-bridge.js",
+  "/static/js/mobile/mobile-auth.js",
+  "/static/js/ui/navigation.js"
 ];
 
 self.addEventListener("install", (event) => {
@@ -43,7 +43,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // En línea siempre se obtiene la versión publicada más reciente. La caché es
+  // únicamente un respaldo para los recursos visuales cuando no hay conexión.
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request).then(
+        (cached) => cached || new Response("Se requiere conexión", { status: 503 })
+      ))
   );
 });

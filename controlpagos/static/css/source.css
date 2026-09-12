@@ -167,6 +167,7 @@ input:-webkit-autofill:active {
     position: relative;
     align-items: flex-start;
     flex-direction: column;
+    justify-content: flex-start;
     gap: 0.85rem;
     min-height: 10.25rem;
     padding: 1rem;
@@ -184,8 +185,8 @@ input:-webkit-autofill:active {
     right: 0.65rem;
     margin: 0;
   }
-  .group-edit { top: 5.35rem; right: 6.15rem; }
-  .group-copy { top: 5.35rem; right: 3.4rem; }
+  .group-edit { top: 4rem; right: 6.15rem; }
+  .group-copy { top: 4rem; right: 3.4rem; }
   .group-delete {
     top: 0.75rem;
     border: 1px solid rgba(251, 113, 133, 0.28);
@@ -194,7 +195,7 @@ input:-webkit-autofill:active {
   }
   .group-summary > .fa-chevron-down {
     position: absolute;
-    top: 5.85rem;
+    top: 4.5rem;
     right: 1.35rem;
     margin: 0;
   }
