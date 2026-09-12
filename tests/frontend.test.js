@@ -139,6 +139,20 @@ test('mobile has pull to refresh, keeps the header above cards, and uses the web
   expect(launcher).toContain('#012E40');
 });
 
+test('mobile groups keep actions on the edge and refresh without a success toast', () => {
+  const apiSource = fs.readFileSync(apiPath, 'utf8');
+  const appSource = fs.readFileSync(appPath, 'utf8');
+  const html = fs.readFileSync(path.join(projectRoot, 'controlpagos', 'templates', 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(staticRoot, 'css', 'source.css'), 'utf8');
+  expect(apiSource).not.toContain('Datos actualizados');
+  expect(appSource).toContain('window.matchMedia');
+  expect(css).toContain('.group-summary > .fa-chevron-down');
+  expect(css).toContain('.group-edit { top: 6.25rem; }');
+  expect(css).toContain('.group-copy { top: 9.1rem; }');
+  expect(html).not.toContain("app.navigate('dashboard'); toggleMobileMenu()");
+  expect(html).not.toContain("app.navigate('receivables'); toggleMobileMenu()");
+});
+
 test('the invisible toast never captures taps over Android navigation', () => {
   const css = fs.readFileSync(path.join(staticRoot, 'css', 'source.css'), 'utf8');
   expect(css).toContain('#toast { pointer-events: none; }');

@@ -110,14 +110,20 @@ const app = {
         break;
     }
 
-    // Animation Entrance
-    main.animate(
-      [
-        { opacity: 0, transform: "translateY(10px)" },
-        { opacity: 1, transform: "translateY(0)" },
-      ],
-      { duration: 300, easing: "ease-out" }
-    );
+    // En equipos móviles, evitar una animación de toda la pantalla reduce el trabajo
+    // de composición cada vez que se vuelve a dibujar el resumen.
+    const reduceMotion = window.matchMedia?.(
+      "(max-width: 767px), (prefers-reduced-motion: reduce)"
+    )?.matches;
+    if (!reduceMotion && typeof main.animate === "function") {
+      main.animate(
+        [
+          { opacity: 0, transform: "translateY(10px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        { duration: 300, easing: "ease-out" }
+      );
+    }
   },
 
   updateSidebarBalance() {
@@ -295,8 +301,8 @@ const app = {
             </div>
 
             <!-- Recent Activity / Quick Actions could go here -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 backdrop-blur-xl">
+            <div class="dashboard-detail-grid grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+                <div class="dashboard-detail-panel bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 backdrop-blur-xl">
                     <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
                         <i class="fa-solid fa-bolt text-yellow-400 mr-2"></i> Acciones Rápidas
                     </h3>
@@ -316,7 +322,7 @@ const app = {
                     </div>
                 </div>
                 
-                <div class="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 backdrop-blur-xl">
+                <div class="dashboard-detail-panel bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 backdrop-blur-xl">
                     <h3 class="text-lg font-semibold text-white mb-4">Estado Financiero</h3>
                     <div class="flex items-center justify-between p-4 bg-gray-700/30 rounded-xl mb-3">
                          <span class="text-gray-400">Balance Neto</span>

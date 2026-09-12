@@ -139,10 +139,21 @@ input:-webkit-autofill:active {
   .dashboard-card {
     min-height: 9.25rem;
     padding: 1rem;
+    /* backdrop-filter es costoso en WebView Android, especialmente en el resumen. */
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none;
+    contain: content;
   }
 
   .dashboard-card h2 { font-size: 1.35rem; line-height: 1.7rem; }
   .dashboard-card .summary-icon { width: 2.25rem; height: 2.25rem; }
+  .dashboard-card:hover { transform: none; box-shadow: none; }
+  .dashboard-detail-panel {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    contain: content;
+  }
 
   .list-toolbar,
   .membership-toolbar {
@@ -157,22 +168,35 @@ input:-webkit-autofill:active {
     align-items: flex-start;
     flex-direction: column;
     gap: 0.85rem;
+    min-height: 12.75rem;
     padding: 1rem;
     padding-right: 3.8rem;
   }
 
   .group-identity { width: 100%; }
-  .group-summary { width: 100%; justify-content: space-between; }
-  .group-tools { gap: 0.35rem; }
-  .group-tools > span { width: 2.4rem; height: 2.4rem; }
+  .group-summary { width: 100%; justify-content: flex-start; }
+  .group-tools { display: contents; }
+  .group-tools > span { width: 2.4rem; height: 2.4rem; margin: 0; }
+  .group-edit,
+  .group-copy,
   .group-delete {
     position: absolute;
-    top: 0.75rem;
     right: 0.65rem;
     margin: 0;
+  }
+  .group-edit { top: 6.25rem; }
+  .group-copy { top: 9.1rem; }
+  .group-delete {
+    top: 0.75rem;
     border: 1px solid rgba(251, 113, 133, 0.28);
     background: rgba(244, 63, 94, 0.1);
     color: #fda4af;
+  }
+  .group-summary > .fa-chevron-down {
+    position: absolute;
+    top: 3.65rem;
+    right: 1.35rem;
+    margin: 0;
   }
   .group-header:hover .group-delete { background: rgba(244, 63, 94, 0.14); }
   .record-actions { opacity: 1 !important; }

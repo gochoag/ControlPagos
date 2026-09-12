@@ -65,7 +65,7 @@
     }
   };
 
-  app.refreshVisibleData = async function ({ force = false, notify = false } = {}) {
+  app.refreshVisibleData = async function ({ force = false } = {}) {
     if (navigator.onLine === false || this._foregroundRefreshInProgress) return false;
     const now = Date.now();
     if (!force && now - (this._lastForegroundRefreshAt || 0) < 1000) return false;
@@ -78,7 +78,6 @@
       const loaded = await this.loadData();
       if (loaded) {
         this.navigate(this.currentView);
-        if (notify) this.showToast("Datos actualizados");
       }
       else {
         this.data = previousData;
@@ -149,7 +148,7 @@
       indicator.classList.add("is-visible", "is-loading");
       indicator.style.setProperty("--pull-distance", "0px");
       indicator.querySelector("i")?.classList.replace("fa-arrow-down", "fa-arrows-rotate");
-      await this.refreshVisibleData({ force: true, notify: true });
+      await this.refreshVisibleData({ force: true });
       refreshing = false;
       reset();
     };
