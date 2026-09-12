@@ -150,6 +150,8 @@ test('mobile groups keep actions on the edge and refresh without a success toast
   expect(css).toContain('.group-edit { top: 5.35rem; right: 6.15rem; }');
   expect(css).toContain('.group-copy { top: 5.35rem; right: 3.4rem; }');
   expect(css).toContain('top: 5.85rem;');
+  expect(html).toContain('/static/css/style.css?v=9');
+  expect(html).toContain('/static/js/core/api.js?v=9');
   expect(html).not.toContain("app.navigate('dashboard'); toggleMobileMenu()");
   expect(html).not.toContain("app.navigate('receivables'); toggleMobileMenu()");
 });

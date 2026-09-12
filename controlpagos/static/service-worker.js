@@ -1,21 +1,21 @@
-const CACHE_NAME = "controlpagos-shell-v8";
+const CACHE_NAME = "controlpagos-shell-v9";
 const SHELL_FILES = [
   "/offline.html",
   "/static/images/favicon.svg",
   "/static/images/icon-192.png",
   "/static/images/icon-512.png",
   "/manifest.webmanifest",
-  "/static/css/style.css",
+  "/static/css/style.css?v=9",
   "/static/vendor/fontawesome/css/all.min.css",
   "/static/vendor/fontawesome/webfonts/fa-solid-900.woff2",
   "/static/vendor/fontawesome/webfonts/fa-regular-400.woff2",
-  "/static/js/domain/reportFormatter.js",
-  "/static/js/domain/receivableData.js",
-  "/static/js/core/app.js",
-  "/static/js/core/api.js",
-  "/static/js/mobile/native-bridge.js",
-  "/static/js/mobile/mobile-auth.js",
-  "/static/js/ui/navigation.js"
+  "/static/js/domain/reportFormatter.js?v=9",
+  "/static/js/domain/receivableData.js?v=9",
+  "/static/js/core/app.js?v=9",
+  "/static/js/core/api.js?v=9",
+  "/static/js/mobile/native-bridge.js?v=9",
+  "/static/js/mobile/mobile-auth.js?v=9",
+  "/static/js/ui/navigation.js?v=9"
 ];
 
 self.addEventListener("install", (event) => {
