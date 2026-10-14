@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mismo monedero turquesa que controlpagos/static/images/favicon.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#3CA6A6"
+        android:pathData="M32,0H76A32,32 0,0 1,108 32V76A32,32 0,0 1,76 108H32A32,32 0,0 1,0 76V32A32,32 0,0 1,32 0Z" />
+    <path
+        android:fillColor="#012E40"
+        android:pathData="M75.6,32.4H32.4C26.46,32.4 21.6,37.26 21.6,43.2V75.6C21.6,81.54 26.46,86.4 32.4,86.4H75.6C81.54,86.4 86.4,81.54 86.4,75.6V43.2C86.4,37.26 81.54,32.4 75.6,32.4Z" />
+    <path
+        android:fillColor="#3CA6A6"
+        android:pathData="M70.2,54H86.4V64.8H70.2C69.01,64.8 68.04,63.83 68.04,62.64V56.16C68.04,54.97 69.01,54 70.2,54Z" />
+</vector>

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ControlPagos</string>
+    <string name="title_activity_main">ControlPagos</string>
+    <string name="package_name">com.controlpagos.app</string>
+    <string name="custom_url_scheme">com.controlpagos.app</string>
+</resources>

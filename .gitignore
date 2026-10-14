@@ -4,6 +4,16 @@ Thumbs.db
 *.log
 .env
 db.json
+instance/
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/**/build/
+mobile/android/local.properties
+mobile/*.keystore
 .wwebjs_auth/
 .wwebjs_cache/
 .commandcode

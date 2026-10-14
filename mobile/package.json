@@ -1,0 +1,22 @@
+{
+  "name": "controlpagos-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:bridge": "esbuild src/native-bridge.js --bundle --format=iife --platform=browser --outfile=../controlpagos/static/js/mobile/native-bridge.js",
+    "sync": "cap sync android",
+    "build:debug": "npm run build:bridge && cap sync android && cd android && .\\gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/share": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "esbuild": "^0.25.0"
+  }
+}
