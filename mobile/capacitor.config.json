@@ -3,7 +3,7 @@
   "appName": "ControlPagos",
   "webDir": "www",
   "server": {
-    "url": "https://oldkimi.pythonanywhere.com",
+    "url": "https://controlpagos.cfd",
     "cleartext": false
   }
 }

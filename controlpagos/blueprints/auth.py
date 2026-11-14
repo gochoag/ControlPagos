@@ -3,15 +3,21 @@ import secrets
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 from sqlalchemy import func
-from werkzeug.security import check_password_hash
 
-from ..extensions import db
+from ..extensions import db, limiter
 from ..models import DeviceCredential, User
-from ..security import check_csrf, csrf_token, login_required
+from ..security import check_csrf, csrf_token, login_required, verify_password
 from ..services.data_service import utc_now
 
 
 auth_bp = Blueprint("auth", __name__)
+
+# Solo cuentan los intentos fallidos: un login correcto no consume el cupo.
+LOGIN_LIMIT = "5 per minute;30 per hour"
+
+
+def _failed(response):
+    return response.status_code == 401
 
 
 @auth_bp.get("/login")
@@ -22,6 +28,7 @@ def login_page():
 
 
 @auth_bp.post("/login")
+@limiter.limit(LOGIN_LIMIT, deduct_when=_failed)
 def login():
     csrf_error = check_csrf()
     if csrf_error:
@@ -29,8 +36,9 @@ def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     user = User.query.filter(func.lower(User.username) == username.lower()).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    if not verify_password(user, password):
         return render_template("login.html", error="Usuario o contraseña incorrectos"), 401
+    db.session.commit()  # guarda el rehash si verify_password actualizó el hash
     session.clear()
     session.permanent = True
     session["user_id"] = user.id
@@ -78,6 +86,7 @@ def register_device():
 
 
 @auth_bp.post("/api/auth/device/login")
+@limiter.limit(LOGIN_LIMIT, deduct_when=_failed)
 def device_login():
     csrf_error = check_csrf()
     if csrf_error:

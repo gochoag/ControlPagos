@@ -322,16 +322,6 @@
     }
   };
 
-  app.downloadDatabaseBackup = async function () {
-    if (!window.confirm('La copia SQLite contiene también usuarios y credenciales cifradas. ¿Crear la copia completa?')) return;
-    try {
-      await this._downloadFile('/api/backup/database', 'controlpagos.sqlite3');
-      this.showToast('Copia completa preparada');
-    } catch (error) {
-      this.showToast(error.message, 'error');
-    }
-  };
-
   app.restoreBackup = async function (input) {
     const file = input.files[0];
     if (!file) return;
