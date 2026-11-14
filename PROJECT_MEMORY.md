@@ -9,11 +9,10 @@ Bitácora para ponerse al día rápido: qué se hizo y qué se decidió, por fec
   - usuario `ochy` creado y `bd.json` cargado en producción;
   - APK `app-v2` (firmado en el CI) instalado y funcionando;
   - keystore en `%USERPROFILE%\claves-controlpagos\`, con copia en el gestor de contraseñas.
+- **Vigilancia:** monitor de Uptime Kuma (HTTP con palabra clave `ok` en `/health`, aviso por Telegram). HSTS activo en Cloudflare: 6 meses, con subdominios, sin preload.
 - **Pendiente:**
-  1. Monitores en Uptime Kuma (`/health`).
-  2. HSTS en Cloudflare.
-  3. Apagar PythonAnywhere.
-  4. Subir los cambios locales pendientes: `.gitignore` con `*.pem`/`*.key`/`*.crt`, cabeceras duplicadas eliminadas y esta bitácora.
+  1. Apagar PythonAnywhere.
+  2. Subir los cambios locales pendientes: `.gitignore` con `*.pem`/`*.key`/`*.crt`, cabeceras duplicadas eliminadas, el orden tag → merge del APK y esta bitácora.
 
 ---
 

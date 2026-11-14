@@ -47,5 +47,5 @@ Lee también [PROJECT_MEMORY.md](PROJECT_MEMORY.md): historial por fecha de lo h
 ## App móvil
 
 - Es un WebView remoto: los cambios web llegan solos. Solo los cambios **nativos** (plugins, `capacitor.config.json`, `android/`) requieren APK nuevo.
-- Si un cambio exige APK nuevo, en el mismo PR: sube `versionCode` en `mobile/android/app/build.gradle` e iguala `MIN_APP_BUILD` en `controlpagos/config.py`. Después, tag `app-v<versionCode>` (workflow `apk.yml`).
+- Si un cambio exige APK nuevo, en el mismo PR: sube `versionCode` en `mobile/android/app/build.gradle` e iguala `MIN_APP_BUILD` en `controlpagos/config.py`. El tag `app-v<versionCode>` (workflow `apk.yml`) se sube sobre el último commit del PR **antes del merge**: si se despliega antes de que exista el release, el bloqueo descarga el APK viejo.
 - Si tocas `mobile/src/native-bridge.js`, ejecuta `npm run build:bridge` (en `mobile/`): el bundle servido vive en `controlpagos/static/js/mobile/`.

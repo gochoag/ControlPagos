@@ -12,9 +12,10 @@ Cuando un cambio nativo exige un APK nuevo, en el **mismo PR**:
 
 1. Sube `versionCode` (y `versionName`) en `android/app/build.gradle`.
 2. Iguala `MIN_APP_BUILD` en `controlpagos/config.py` a ese `versionCode`.
-3. Tras el merge, publica el APK: `git tag app-v<versionCode> && git push origin app-v<versionCode>`. El workflow `apk.yml` lo compila, lo firma y lo adjunta al release `latest`.
+3. **Antes del merge**, crea el tag `app-v<versionCode>` sobre el último commit del PR y súbelo (GitHub Desktop: *History* → clic derecho en el commit → *Create Tag…* → *Push*). El workflow `apk.yml` lo compila, lo firma y lo adjunta al release `latest`.
+4. Cuando el release esté publicado, haz el merge.
 
-Publica el tag **antes** o justo después del despliegue: mientras no exista el release, el botón de descarga no tendrá APK nuevo.
+Si haces el merge primero, el bloqueo aparece en cuanto se despliega, pero el botón todavía descarga el APK viejo y la app sigue bloqueada después de instalarlo.
 
 Si el cambio nativo es opcional (no rompe la app vieja), no subas `MIN_APP_BUILD`.
 
