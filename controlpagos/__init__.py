@@ -39,13 +39,8 @@ def create_app(test_config=None):
     app.register_blueprint(api_bp)
     register_commands(app)
 
-    @app.after_request
-    def security_headers(response):
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "same-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        return response
+    # Cabeceras de seguridad (nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy) y HSTS:
+    # las ponen nginx del VPS (templates/vps-cabeceras.conf) y Cloudflare. Duplicarlas aquí daba valores en conflicto.
 
     @app.errorhandler(404)
     def not_found(_error):

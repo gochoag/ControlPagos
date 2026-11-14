@@ -4,20 +4,44 @@ Bitácora para ponerse al día rápido: qué se hizo y qué se decidió, por fec
 
 ## Estado actual
 
-- **Hecho en local (sin subir):** migración a PostgreSQL, CLI de administración, hardening, actualización forzada del APK, Docker + CI.
+- **En producción:** `https://controlpagos.cfd` desplegado en el VPS (Cloudflare + DNSSEC + nginx + PostgreSQL compartido).
+- **Datos y app:**
+  - usuario `ochy` creado y `bd.json` cargado en producción;
+  - APK `app-v2` (firmado en el CI) instalado y funcionando;
+  - keystore en `%USERPROFILE%\claves-controlpagos\`, con copia en el gestor de contraseñas.
 - **Pendiente:**
-  1. Crear el usuario: `python manage.py createsuperuser`.
-  2. El usuario hace commit y PR de ControlPagos (GitHub Desktop).
-  3. PR a `infra-vps-tecnomovil`, rama `plantillas-agnosticas`.
-  4. Cloudflare para `controlpagos.cfd`.
-  5. Alta en el VPS (`projects.yml`, cert, `vps-new-project`, `.env`, clave CI, OAuth Tailscale) y los secrets de GitHub (7 de despliegue + 4 de Android).
-  6. Primer despliegue y `loaddata` de `bd.json`.
-  7. Generar el keystore y publicar el tag `app-v2`.
-  8. Apagar PythonAnywhere.
+  1. Monitores en Uptime Kuma (`/health`).
+  2. HSTS en Cloudflare.
+  3. Apagar PythonAnywhere.
+  4. Subir los cambios locales pendientes: `.gitignore` con `*.pem`/`*.key`/`*.crt`, cabeceras duplicadas eliminadas y esta bitácora.
 
 ---
 
 ## 2026-11-14 — Paso de PythonAnywhere al VPS
+
+**Avance (tarde)**
+- **CI del PR #2:** se corrigió `pytest` → `python -m pytest`. Los tests generan su contraseña (era un falso positivo de GitGuardian por credenciales literales).
+- **Cloudflare listo:**
+  - nameservers `bruce`/`lana`;
+  - un registro A `@` con proxy (la IP del VPS queda oculta) y sin `www`;
+  - SSL Full (strict), Always HTTPS y TLS 1.2;
+  - Origin Certificate de 15 años, guardado fuera del repo;
+  - AOP **Global**;
+  - Bot Fight Mode off y crawlers de IA y buscadores bloqueados.
+  - Mientras el VPS no tenga sitio, `https://` da 525: es lo esperado.
+- **DNSSEC:** DS `2371 13 2 A08A…A381` publicado en `.cfd`, coincide con la KSK de Cloudflare.
+- Repo infra: PR #1 (plantillas) y PR #2 (`projects.yml`: `controlpagos`, 8111/8112, base `controlpagos`) mergeados.
+- VPS:
+  - `vps-new-project controlpagos` ejecutado;
+  - la contraseña del rol se rotó con `ALTER ROLE` porque la URL original quedó expuesta en el chat;
+  - `.env` escrito (`deploy:deploy 600`);
+  - la clave `ci-controlpagos` está en `authorized_keys` de `deploy`.
+- GitHub: los 7 secrets de despliegue están puestos (`gh` tiene activa la cuenta `exinoss`; para este repo usar `GH_TOKEN=$(gh auth token --user gochoag)`).
+- **Primer despliegue OK** (workflow_dispatch). El primer push a `main` había fallado porque aún faltaban los secrets.
+  - Funciona: `/health` 200, `/login` 200, `/api/data` 401 sin sesión, cookie `Secure; HttpOnly; SameSite=Lax`.
+- **Datos en producción:** `createsuperuser` con `docker exec -it`. `bd.json` se subió por WinSCP a `/home/ochy/` (no a `/tmp`: es compartido), se cargó con `loaddata - < ~/bd.json` y luego se borró. El usuario se conecta con PuTTY/WinSCP (clave `.ppk`): el `ssh` de Git Bash no la usa.
+- **APK:** la clave de firma se creó con el `keytool` de Android Studio (`jbr\bin`). Los 4 secrets `ANDROID_*` están puestos y el tag `app-v2` compiló bien en el CI. Hubo que desinstalar la app vieja, firmada con la clave de depuración.
+- Se quitaron las cabeceras de seguridad de Flask: nginx (`vps-cabeceras.conf`) ya las pone y salían duplicadas (`X-Frame-Options` DENY y SAMEORIGIN a la vez).
 
 **Decisiones**
 - Despliegue en el VPS compartido "tecnomovil" (el usuario es su admin) siguiendo `infra-vps-tecnomovil`. Dominio `controlpagos.cfd` en la raíz. Puertos esperados: 8111/8112. Postgres compartido.
