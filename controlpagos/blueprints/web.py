@@ -6,6 +6,12 @@ from ..security import login_required
 web_bp = Blueprint("web", __name__)
 
 
+@web_bp.get("/health")
+def health():
+    # Sin base de datos: si PG cae un momento, Docker no debe reiniciar la app en bucle.
+    return "ok"
+
+
 @web_bp.get("/")
 @login_required
 def index():

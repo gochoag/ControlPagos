@@ -520,73 +520,8 @@
     }
   });
 
-  // node_modules/@aparajita/capacitor-biometric-auth/dist/esm/definitions.js
-  function isBiometryErrorType(value) {
-    return typeof value === "string" && // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    Object.values(BiometryErrorType).includes(value);
-  }
-  var BiometryType, AndroidBiometryStrength, BiometryErrorType, BiometryError;
-  var init_definitions = __esm({
-    "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/definitions.js"() {
-      (function(BiometryType2) {
-        BiometryType2[BiometryType2["none"] = 0] = "none";
-        BiometryType2[BiometryType2["touchId"] = 1] = "touchId";
-        BiometryType2[BiometryType2["faceId"] = 2] = "faceId";
-        BiometryType2[BiometryType2["fingerprintAuthentication"] = 3] = "fingerprintAuthentication";
-        BiometryType2[BiometryType2["faceAuthentication"] = 4] = "faceAuthentication";
-        BiometryType2[BiometryType2["irisAuthentication"] = 5] = "irisAuthentication";
-      })(BiometryType || (BiometryType = {}));
-      (function(AndroidBiometryStrength2) {
-        AndroidBiometryStrength2[AndroidBiometryStrength2["weak"] = 0] = "weak";
-        AndroidBiometryStrength2[AndroidBiometryStrength2["strong"] = 1] = "strong";
-      })(AndroidBiometryStrength || (AndroidBiometryStrength = {}));
-      (function(BiometryErrorType2) {
-        BiometryErrorType2["none"] = "";
-        BiometryErrorType2["appCancel"] = "appCancel";
-        BiometryErrorType2["authenticationFailed"] = "authenticationFailed";
-        BiometryErrorType2["invalidContext"] = "invalidContext";
-        BiometryErrorType2["notInteractive"] = "notInteractive";
-        BiometryErrorType2["passcodeNotSet"] = "passcodeNotSet";
-        BiometryErrorType2["systemCancel"] = "systemCancel";
-        BiometryErrorType2["userCancel"] = "userCancel";
-        BiometryErrorType2["userFallback"] = "userFallback";
-        BiometryErrorType2["biometryLockout"] = "biometryLockout";
-        BiometryErrorType2["biometryNotAvailable"] = "biometryNotAvailable";
-        BiometryErrorType2["biometryNotEnrolled"] = "biometryNotEnrolled";
-        BiometryErrorType2["noDeviceCredential"] = "noDeviceCredential";
-      })(BiometryErrorType || (BiometryErrorType = {}));
-      BiometryError = class _BiometryError extends Error {
-        constructor(message, code) {
-          super(message);
-          this.code = code;
-          this.name = "BiometryError";
-          Object.setPrototypeOf(this, _BiometryError.prototype);
-        }
-      };
-    }
-  });
-
-  // node_modules/@aparajita/capacitor-biometric-auth/dist/esm/web-utils.js
-  function getBiometryName(type) {
-    return kBiometryTypeNameMap[type] || "";
-  }
-  var kBiometryTypeNameMap;
-  var init_web_utils = __esm({
-    "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/web-utils.js"() {
-      init_definitions();
-      kBiometryTypeNameMap = {
-        [BiometryType.none]: "",
-        [BiometryType.touchId]: "Touch ID",
-        [BiometryType.faceId]: "Face ID",
-        [BiometryType.fingerprintAuthentication]: "Fingerprint Authentication",
-        [BiometryType.faceAuthentication]: "Face Authentication",
-        [BiometryType.irisAuthentication]: "Iris Authentication"
-      };
-    }
-  });
-
   // node_modules/@capacitor/app/dist/esm/definitions.js
-  var init_definitions2 = __esm({
+  var init_definitions = __esm({
     "node_modules/@capacitor/app/dist/esm/definitions.js"() {
     }
   });
@@ -648,10 +583,75 @@
   var init_esm = __esm({
     "node_modules/@capacitor/app/dist/esm/index.js"() {
       init_dist();
-      init_definitions2();
+      init_definitions();
       App = registerPlugin("App", {
         web: () => Promise.resolve().then(() => (init_web(), web_exports)).then((m) => new m.AppWeb())
       });
+    }
+  });
+
+  // node_modules/@aparajita/capacitor-biometric-auth/dist/esm/definitions.js
+  function isBiometryErrorType(value) {
+    return typeof value === "string" && // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    Object.values(BiometryErrorType).includes(value);
+  }
+  var BiometryType, AndroidBiometryStrength, BiometryErrorType, BiometryError;
+  var init_definitions2 = __esm({
+    "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/definitions.js"() {
+      (function(BiometryType2) {
+        BiometryType2[BiometryType2["none"] = 0] = "none";
+        BiometryType2[BiometryType2["touchId"] = 1] = "touchId";
+        BiometryType2[BiometryType2["faceId"] = 2] = "faceId";
+        BiometryType2[BiometryType2["fingerprintAuthentication"] = 3] = "fingerprintAuthentication";
+        BiometryType2[BiometryType2["faceAuthentication"] = 4] = "faceAuthentication";
+        BiometryType2[BiometryType2["irisAuthentication"] = 5] = "irisAuthentication";
+      })(BiometryType || (BiometryType = {}));
+      (function(AndroidBiometryStrength2) {
+        AndroidBiometryStrength2[AndroidBiometryStrength2["weak"] = 0] = "weak";
+        AndroidBiometryStrength2[AndroidBiometryStrength2["strong"] = 1] = "strong";
+      })(AndroidBiometryStrength || (AndroidBiometryStrength = {}));
+      (function(BiometryErrorType2) {
+        BiometryErrorType2["none"] = "";
+        BiometryErrorType2["appCancel"] = "appCancel";
+        BiometryErrorType2["authenticationFailed"] = "authenticationFailed";
+        BiometryErrorType2["invalidContext"] = "invalidContext";
+        BiometryErrorType2["notInteractive"] = "notInteractive";
+        BiometryErrorType2["passcodeNotSet"] = "passcodeNotSet";
+        BiometryErrorType2["systemCancel"] = "systemCancel";
+        BiometryErrorType2["userCancel"] = "userCancel";
+        BiometryErrorType2["userFallback"] = "userFallback";
+        BiometryErrorType2["biometryLockout"] = "biometryLockout";
+        BiometryErrorType2["biometryNotAvailable"] = "biometryNotAvailable";
+        BiometryErrorType2["biometryNotEnrolled"] = "biometryNotEnrolled";
+        BiometryErrorType2["noDeviceCredential"] = "noDeviceCredential";
+      })(BiometryErrorType || (BiometryErrorType = {}));
+      BiometryError = class _BiometryError extends Error {
+        constructor(message, code) {
+          super(message);
+          this.code = code;
+          this.name = "BiometryError";
+          Object.setPrototypeOf(this, _BiometryError.prototype);
+        }
+      };
+    }
+  });
+
+  // node_modules/@aparajita/capacitor-biometric-auth/dist/esm/web-utils.js
+  function getBiometryName(type) {
+    return kBiometryTypeNameMap[type] || "";
+  }
+  var kBiometryTypeNameMap;
+  var init_web_utils = __esm({
+    "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/web-utils.js"() {
+      init_definitions2();
+      kBiometryTypeNameMap = {
+        [BiometryType.none]: "",
+        [BiometryType.touchId]: "Touch ID",
+        [BiometryType.faceId]: "Face ID",
+        [BiometryType.fingerprintAuthentication]: "Fingerprint Authentication",
+        [BiometryType.faceAuthentication]: "Face Authentication",
+        [BiometryType.irisAuthentication]: "Iris Authentication"
+      };
     }
   });
 
@@ -661,7 +661,7 @@
     "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/base.js"() {
       init_esm();
       init_dist();
-      init_definitions();
+      init_definitions2();
       BiometricAuthBase = class extends WebPlugin {
         async authenticate(options) {
           try {
@@ -704,7 +704,7 @@
   var init_web2 = __esm({
     "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/web.js"() {
       init_base();
-      init_definitions();
+      init_definitions2();
       init_web_utils();
       BiometricAuthWeb = class extends BiometricAuthBase {
         constructor() {
@@ -816,7 +816,7 @@
   var init_native = __esm({
     "node_modules/@aparajita/capacitor-biometric-auth/dist/esm/native.js"() {
       init_base();
-      init_definitions();
+      init_definitions2();
       BiometricAuthNative = class extends BiometricAuthBase {
         constructor(capProxy) {
           super();
@@ -1782,11 +1782,12 @@
   });
 
   // src/native-bridge.js
+  init_esm();
   init_dist();
 
   // node_modules/@aparajita/capacitor-biometric-auth/dist/esm/index.js
   init_dist();
-  init_definitions();
+  init_definitions2();
   init_web_utils();
   var proxy = registerPlugin("BiometricAuthNative", {
     web: async () => {
@@ -1929,6 +1930,46 @@
       return result.uri;
     }
   };
+  async function installedBuild() {
+    try {
+      return Number((await App.getInfo()).build) || 0;
+    } catch {
+      return 0;
+    }
+  }
+  function showUpdateRequired(downloadUrl) {
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", "alertdialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "update-title");
+    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0f19;color:#e5e7eb;font-family:system-ui,sans-serif;text-align:center";
+    overlay.innerHTML = `
+    <div style="max-width:360px">
+      <h1 id="update-title" style="font-size:1.4rem;margin:0 0 12px">Actualiza ControlPagos</h1>
+      <p style="margin:0 0 24px;line-height:1.5">Hay una versi\xF3n nueva de la app. Desc\xE1rgala e inst\xE1lala para seguir us\xE1ndola; tus datos est\xE1n en el servidor y no se pierden.</p>
+      <button type="button" style="width:100%;padding:14px;border:0;border-radius:12px;background:#10b981;color:#fff;font-size:1rem;font-weight:600">Descargar actualizaci\xF3n</button>
+    </div>`;
+    overlay.querySelector("button").addEventListener("click", () => {
+      window.location.href = downloadUrl;
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector("button").focus();
+  }
+  async function checkForRequiredUpdate() {
+    if (!isNativeAndroid()) return;
+    try {
+      const response = await fetch("/api/app/version", { cache: "no-store" });
+      if (!response.ok) return;
+      const { minBuild, downloadUrl } = await response.json();
+      if (await installedBuild() < minBuild) showUpdateRequired(downloadUrl);
+    } catch {
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", checkForRequiredUpdate);
+  } else {
+    checkForRequiredUpdate();
+  }
 })();
 /*! Bundled license information:
 

@@ -100,7 +100,8 @@ test('visual assets are local and do not depend on a CDN', () => {
 test('Android backup uses the native bridge and desktop uses a browser download', () => {
   const source = fs.readFileSync(apiPath, 'utf8');
   expect(source).toContain('saveAndShareFile');
-  expect(source).toContain("'/api/backup/database'");
+  expect(source).toContain("'/api/backup'");
+  expect(source).not.toContain('/api/backup/database');
   expect(source).toContain('URL.createObjectURL');
 });
 
@@ -228,4 +229,19 @@ test('sync only patches locally changed records', async () => {
 
   expect(writes).toEqual([{ method: 'PATCH', resource: 'receivables', id: 2 }]);
   expect(fakeApp._serverData.receivables[1].amount).toBe('21.00');
+});
+
+test('native bridge blocks outdated APKs using the backend minimum build', () => {
+  const source = fs.readFileSync(path.join(projectRoot, 'mobile', 'src', 'native-bridge.js'), 'utf8');
+  expect(source).toContain("fetch('/api/app/version'");
+  expect(source).toContain('App.getInfo()');
+  expect(source).toContain('< minBuild');
+  const bundle = fs.readFileSync(path.join(staticRoot, 'js', 'mobile', 'native-bridge.js'), 'utf8');
+  expect(bundle).toContain('/api/app/version'); // el bundle servido está recompilado
+});
+
+test('mobile app points to the production domain over HTTPS', () => {
+  const config = JSON.parse(fs.readFileSync(path.join(projectRoot, 'mobile', 'capacitor.config.json'), 'utf8'));
+  expect(config.server.url).toBe('https://controlpagos.cfd');
+  expect(config.server.cleartext).toBe(false);
 });

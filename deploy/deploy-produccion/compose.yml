@@ -1,0 +1,35 @@
+# Adaptado de infra-vps-tecnomovil/plantillas/deploy-produccion/compose.yml.
+# IMAGE, HOST_PORT y PROYECTO los pone el VPS al desplegar.
+services:
+  app:
+    image: ${IMAGE}
+    user: "10001:10001"
+    env_file: /srv/apps/${PROYECTO}/.env
+    ports:
+      - "127.0.0.1:${HOST_PORT}:8000"
+    read_only: true
+    tmpfs: [/tmp]
+    pids_limit: 200
+    restart: unless-stopped
+    stop_grace_period: 20s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    networks: [infra]
+
+  migrate:
+    profiles: ["migrate"]
+    image: ${IMAGE}
+    user: "10001:10001"
+    env_file: /srv/apps/${PROYECTO}/.env
+    command: ["python", "manage.py", "migrate"]
+    networks: [infra]
+
+networks:
+  infra:
+    external: true

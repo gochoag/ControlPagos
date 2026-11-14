@@ -1,3 +1,4 @@
+import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
@@ -55,3 +56,48 @@ window.NativeApp = {
     return result.uri;
   },
 };
+
+// Un APK sin el plugin App (anterior a la build 2) cuenta como build 0: también debe actualizarse.
+async function installedBuild() {
+  try {
+    return Number((await App.getInfo()).build) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function showUpdateRequired(downloadUrl) {
+  const overlay = document.createElement('div');
+  overlay.setAttribute('role', 'alertdialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'update-title');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0f19;color:#e5e7eb;font-family:system-ui,sans-serif;text-align:center';
+  overlay.innerHTML = `
+    <div style="max-width:360px">
+      <h1 id="update-title" style="font-size:1.4rem;margin:0 0 12px">Actualiza ControlPagos</h1>
+      <p style="margin:0 0 24px;line-height:1.5">Hay una versión nueva de la app. Descárgala e instálala para seguir usándola; tus datos están en el servidor y no se pierden.</p>
+      <button type="button" style="width:100%;padding:14px;border:0;border-radius:12px;background:#10b981;color:#fff;font-size:1rem;font-weight:600">Descargar actualización</button>
+    </div>`;
+  // Capacitor abre los dominios externos (GitHub) en el navegador del sistema.
+  overlay.querySelector('button').addEventListener('click', () => { window.location.href = downloadUrl; });
+  document.body.appendChild(overlay);
+  overlay.querySelector('button').focus();
+}
+
+async function checkForRequiredUpdate() {
+  if (!isNativeAndroid()) return;
+  try {
+    const response = await fetch('/api/app/version', { cache: 'no-store' });
+    if (!response.ok) return;
+    const { minBuild, downloadUrl } = await response.json();
+    if ((await installedBuild()) < minBuild) showUpdateRequired(downloadUrl);
+  } catch {
+    // Sin conexión: no se bloquea; se comprueba en el siguiente arranque.
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', checkForRequiredUpdate);
+} else {
+  checkForRequiredUpdate();
+}

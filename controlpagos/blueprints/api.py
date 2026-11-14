@@ -1,15 +1,12 @@
 import json
-import io
 from datetime import date
-from pathlib import Path
 
-from flask import Blueprint, abort, jsonify, request, send_file
+from flask import Blueprint, abort, current_app, jsonify, request
 from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Receivable, ReceivableContact, RESOURCE_MODELS
 from ..security import check_csrf, login_required
-from ..services.backup_service import BackupUnavailable, create_sqlite_snapshot
 from ..services.data_service import (
     ValidationError,
     apply_payload,
@@ -28,6 +25,15 @@ def json_body():
     if not isinstance(payload, dict):
         raise ValidationError("El cuerpo debe ser un objeto JSON")
     return payload
+
+
+@api_bp.get("/app/version")
+def app_version():
+    # Público: el APK lo consulta antes de iniciar sesión para exigir la actualización.
+    return jsonify(
+        minBuild=current_app.config["MIN_APP_BUILD"],
+        downloadUrl=current_app.config["APP_DOWNLOAD_URL"],
+    )
 
 
 @api_bp.get("/data")
@@ -166,24 +172,6 @@ def download_backup():
     response = jsonify(database_payload())
     response.headers["Content-Disposition"] = f'attachment; filename="control_pagos_backup_{date.today().isoformat()}.json"'
     return response
-
-
-@api_bp.get("/backup/database")
-@login_required
-def download_database_backup():
-    try:
-        snapshot = create_sqlite_snapshot()
-    except BackupUnavailable as exc:
-        return jsonify(error=str(exc)), 409
-
-    snapshot_bytes = Path(snapshot).read_bytes()
-    Path(snapshot).unlink(missing_ok=True)
-    return send_file(
-        io.BytesIO(snapshot_bytes),
-        mimetype="application/vnd.sqlite3",
-        as_attachment=True,
-        download_name=f"controlpagos_db_{date.today().isoformat()}.sqlite3",
-    )
 
 
 @api_bp.post("/backup/restore")

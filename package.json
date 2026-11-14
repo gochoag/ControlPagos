@@ -4,7 +4,7 @@
   "scripts": {
     "build:css": "tailwindcss -c tailwind.config.cjs -i controlpagos/static/css/source.css -o controlpagos/static/css/style.css --minify",
     "test:js": "bun test",
-    "start": "python -m flask --app wsgi run --debug"
+    "start": "python manage.py run --debug"
   },
   "repository": {
     "type": "git",

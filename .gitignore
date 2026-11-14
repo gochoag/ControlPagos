@@ -4,6 +4,8 @@ Thumbs.db
 *.log
 .env
 db.json
+bd.json
+*.dump
 instance/
 __pycache__/
 .pytest_cache/
@@ -13,9 +15,8 @@ mobile/node_modules/
 mobile/android/.gradle/
 mobile/android/**/build/
 mobile/android/local.properties
-mobile/*.keystore
-.wwebjs_auth/
-.wwebjs_cache/
+*.keystore
+*.jks
+*.apk
 .commandcode
-.kimchi
 docs

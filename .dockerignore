@@ -1,0 +1,26 @@
+# Común (FIJO): nada de secretos, historial ni archivos locales dentro de la imagen
+.git
+.github
+.env
+.env.*
+*.log
+deploy/
+**/*.pem
+**/*.key
+*.dump
+*.sql
+
+# Python y proyecto
+.venv/
+**/__pycache__
+.pytest_cache/
+tests/
+instance/
+node_modules/
+mobile/
+bd.json
+db.json
+*.apk
+*.jks
+*.keystore
+.commandcode

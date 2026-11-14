@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
+from sqlalchemy import text
+
 from ..extensions import db
 from ..models import (
     ClassEntry,
@@ -47,11 +49,27 @@ def serialize_datetime(value):
     return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def required_text(payload, key, label):
+def required_text(payload, key, label, max_length=160):
     value = str(payload.get(key, "")).strip()
     if not value:
         raise ValidationError(f"{label} es obligatorio")
+    if len(value) > max_length:
+        raise ValidationError(f"{label} no puede superar {max_length} caracteres")
     return value
+
+
+def parse_bool(payload, key, default):
+    value = payload.get(key, default)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1"):
+        return True
+    if text in ("false", "0", ""):
+        return False
+    raise ValidationError(f"{key} debe ser verdadero o falso")
 
 
 def optional_text(payload, key):
@@ -118,7 +136,7 @@ def apply_payload(record, payload):
     record.created_at = parse_datetime(payload.get("date"))
     if isinstance(record, Receivable):
         record.name = required_text(payload, "name", "Nombre")
-        record.is_note = bool(payload.get("isNote", False))
+        record.is_note = parse_bool(payload, "isNote", False)
         record.amount_cents = to_scaled_integer(payload.get("amount"), 100, "Monto", record.is_note)
     elif isinstance(record, Payable):
         record.name = required_text(payload, "name", "Nombre")
@@ -134,10 +152,10 @@ def apply_payload(record, payload):
             record.next_payment = None if not next_payment else datetime.strptime(next_payment, "%Y-%m-%d").date()
         except ValueError as exc:
             raise ValidationError("Fecha de pago inválida") from exc
-        record.active = bool(payload.get("active", True))
+        record.active = parse_bool(payload, "active", True)
     elif isinstance(record, Saving):
         record.name = required_text(payload, "name", "Nombre")
-        record.is_note = bool(payload.get("isNote", False))
+        record.is_note = parse_bool(payload, "isNote", False)
         record.amount_cents = to_scaled_integer(payload.get("amount"), 100, "Monto", record.is_note)
     else:
         raise ValidationError("Recurso no soportado")
@@ -175,12 +193,26 @@ def clear_business_data():
         db.session.query(model).delete()
 
 
-def import_payload(payload, require_empty=False):
+def has_business_data():
+    return any(model.query.first() for model in (*RESOURCE_MODELS.values(), ReceivableContact))
+
+
+def reset_sequences():
+    """Tras insertar ids explícitos, PostgreSQL no avanza las secuencias: el siguiente INSERT chocaría."""
+    if db.engine.dialect.name != "postgresql":
+        return
+    for model in (*RESOURCE_MODELS.values(), ReceivableContact):
+        table = model.__tablename__
+        db.session.execute(text(
+            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+            f"COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM {table}"
+        ))
+
+
+def import_payload(payload, require_empty=False, commit=True):
     payload = validate_backup_shape(payload)
-    if require_empty and any(model.query.first() for model in RESOURCE_MODELS.values()):
+    if require_empty and has_business_data():
         raise ValidationError("La base ya contiene registros")
-    if require_empty and ReceivableContact.query.first():
-        raise ValidationError("La base ya contiene contactos")
 
     clear_business_data()
     contacts_by_name = {}
@@ -210,5 +242,8 @@ def import_payload(payload, require_empty=False):
             apply_payload(record, item)
             db.session.add(record)
 
-    db.session.commit()
+    db.session.flush()
+    if commit:
+        reset_sequences()  # setval no es transaccional: solo cuando de verdad se guarda.
+        db.session.commit()
     return {name: len(payload[name]) for name in COLLECTIONS}

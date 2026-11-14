@@ -1,0 +1,68 @@
+# Adaptado de infra-vps-tecnomovil/plantillas/github-workflow-deploy.yml.
+# Flujo: Pruebas -> Imagen (vps-check, hadolint, build, Trivy, prueba de consumo) -> Desplegar -> aviso por Telegram si falla.
+# En un PR solo se prueba; con merge a main, además se publica en GHCR y se despliega en el VPS.
+name: Desplegar
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: desplegar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pruebas
+          POSTGRES_USER: pruebas
+          POSTGRES_PASSWORD: pruebas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pruebas" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Pruebas del backend (PostgreSQL)
+        run: pytest -q
+        env:
+          TEST_DATABASE_URL: postgresql://pruebas:pruebas@127.0.0.1:5432/pruebas
+      - uses: oven-sh/setup-bun@v2
+      - name: Pruebas del frontend
+        run: bun test
+
+  vps:
+    needs: pruebas
+    uses: JuanRZAR/infra-vps-tecnomovil/.github/workflows/deploy.yml@v1
+    with:
+      proyecto: controlpagos
+      dockerfile: Dockerfile
+      contexto: .
+      # La prueba de consumo arranca la imagen sin base ni secretos: SQLite en /tmp y una clave de prueba.
+      env_prueba: |
+        SECRET_KEY=prueba-ci
+        DATABASE_URL=sqlite:////tmp/prueba.sqlite3
+      url_salud: https://controlpagos.cfd/health
+      desplegar: ${{ github.event_name != 'pull_request' }}
+    secrets:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

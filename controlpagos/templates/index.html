@@ -115,9 +115,6 @@
                 <button onclick="app.downloadBackup(); app.closeBackupMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
                   Exportar JSON
                 </button>
-                <button onclick="app.downloadDatabaseBackup(); app.closeBackupMenu()" class="w-full text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm">
-                  Copiar base SQLite
-                </button>
                 <label class="w-full block text-left px-4 py-2 rounded-xl transition-all duration-200 hover:bg-white/5 text-gray-400 hover:text-brand-500 text-sm cursor-pointer">
                   Restaurar
                   <input type="file" class="hidden" onchange="app.restoreBackup(this); app.closeBackupMenu()" accept=".json">
@@ -226,12 +223,6 @@
             class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5 border-t border-gray-700"
           >
             <i class="fa-solid fa-file-code w-7 text-brand-400"></i>Exportar JSON
-          </button>
-          <button
-            onclick="app.downloadDatabaseBackup(); toggleMobileMenu()"
-            class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5"
-          >
-            <i class="fa-solid fa-database w-7 text-brand-400"></i>Copiar base SQLite
           </button>
           <label class="block w-full text-left px-4 py-3 text-gray-300 hover:bg-white/5 cursor-pointer">
             <i class="fa-solid fa-upload w-7 text-brand-400"></i>Restaurar JSON
