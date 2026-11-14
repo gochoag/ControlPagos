@@ -18,5 +18,8 @@ mobile/android/local.properties
 *.keystore
 *.jks
 *.apk
+*.pem
+*.key
+*.crt
 .commandcode
 docs
