@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import secrets
 
 import pytest
 
@@ -14,6 +15,14 @@ from controlpagos.services.data_service import database_payload, import_payload,
 
 # En CI se ejecuta contra PostgreSQL (TEST_DATABASE_URL); en local, SQLite en memoria si no se define.
 TEST_DATABASE_URL = normalize_database_url(os.getenv("TEST_DATABASE_URL", "sqlite://"))
+TEST_USER = "alex"
+# Contraseñas generadas en cada ejecución: sin credenciales literales en el repo (evita falsos positivos de escáneres).
+TEST_PASSWORD = secrets.token_urlsafe(12)
+WRONG_PASSWORD = TEST_PASSWORD + "-mal"
+
+
+def form(token, password=None, username=TEST_USER):
+    return {"username": username, "password": password or TEST_PASSWORD, "csrf_token": token}
 
 
 @pytest.fixture()
@@ -31,7 +40,7 @@ def make_app():
         with app.app_context():
             db.drop_all()
             db.create_all()
-            db.session.add(User(username="alex", password_hash=hash_password("correcta")))
+            db.session.add(User(username=TEST_USER, password_hash=hash_password(TEST_PASSWORD)))
             db.session.commit()
         created.append(app)
         return app
@@ -69,7 +78,7 @@ def login(client):
     token = csrf_from_html(client.get("/login"))
     response = client.post(
         "/login",
-        data={"username": "alex", "password": "correcta", "csrf_token": token},
+        data=form(token),
     )
     assert response.status_code == 302
     with client.session_transaction() as session:
@@ -109,7 +118,7 @@ def test_authentication_protects_view_and_api(client):
     token = csrf_from_html(client.get("/login"))
     rejected = client.post(
         "/login",
-        data={"username": "alex", "password": "incorrecta", "csrf_token": token},
+        data=form(token, WRONG_PASSWORD),
     )
     assert rejected.status_code == 401
     assert b"incorrectos" in rejected.data
@@ -137,7 +146,7 @@ def test_password_login_creates_a_persistent_session_and_marks_it_fresh(client):
     token = csrf_from_html(client.get("/login"))
     client.post(
         "/login",
-        data={"username": "alex", "password": "correcta", "csrf_token": token},
+        data=form(token),
     )
     with client.session_transaction() as active_session:
         assert active_session.permanent is True
@@ -191,7 +200,7 @@ def test_production_session_cookie_is_secure(make_app):
     token = csrf_from_html(secure_client.get("/login"))
     secure_client.post(
         "/login",
-        data={"username": "alex", "password": "correcta", "csrf_token": token},
+        data=form(token),
     )
     cookie = secure_client.get_cookie("session")
     assert cookie.secure is True
@@ -209,7 +218,7 @@ def test_app_refuses_to_start_without_secret_key():
 def failed_login(client, token, ip="203.0.113.10"):
     return client.post(
         "/login",
-        data={"username": "alex", "password": "incorrecta", "csrf_token": token},
+        data=form(token, WRONG_PASSWORD),
         headers={"X-Forwarded-For": ip},
     )
 
@@ -231,7 +240,7 @@ def test_successful_login_does_not_consume_the_limit(client):
         assert failed_login(client, token).status_code == 401
     ok = client.post(
         "/login",
-        data={"username": "alex", "password": "correcta", "csrf_token": token},
+        data=form(token),
         headers={"X-Forwarded-For": "203.0.113.10"},
     )
     assert ok.status_code == 302
@@ -497,7 +506,7 @@ def test_passwords_are_hashed_with_argon2id(application):
     with application.app_context():
         stored = User.query.one().password_hash
         assert stored.startswith("$argon2id$v=19$m=65536,t=3,p=4$")
-        assert "correcta" not in stored
+        assert TEST_PASSWORD not in stored
 
 
 def test_login_rehashes_passwords_with_outdated_parameters(client, application):
@@ -505,7 +514,7 @@ def test_login_rehashes_passwords_with_outdated_parameters(client, application):
 
     with application.app_context():
         user = User.query.one()
-        user.password_hash = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1).hash("correcta")
+        user.password_hash = PasswordHasher(time_cost=1, memory_cost=8192, parallelism=1).hash(TEST_PASSWORD)
         db.session.commit()
     login(client)
     with application.app_context():
@@ -514,10 +523,10 @@ def test_login_rehashes_passwords_with_outdated_parameters(client, application):
 
 def test_unknown_user_and_corrupt_hash_are_rejected(client, application):
     token = csrf_from_html(client.get("/login"))
-    unknown = client.post("/login", data={"username": "nadie", "password": "x", "csrf_token": token})
+    unknown = client.post("/login", data=form(token, WRONG_PASSWORD, username="nadie"))
     assert unknown.status_code == 401
     with application.app_context():
         User.query.one().password_hash = "no-es-un-hash"
         db.session.commit()
-    corrupt = client.post("/login", data={"username": "alex", "password": "correcta", "csrf_token": token})
+    corrupt = client.post("/login", data=form(token))
     assert corrupt.status_code == 401

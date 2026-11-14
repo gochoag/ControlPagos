@@ -19,7 +19,7 @@ Lee también [PROJECT_MEMORY.md](PROJECT_MEMORY.md): historial por fecha de lo h
 - Flask 3 (application factory + blueprints + services), SQLAlchemy, Alembic (Flask-Migrate), PostgreSQL 17, gunicorn, Capacitor 8 (Android).
 - Administración al estilo Django: `python manage.py <migrate|createsuperuser|changepassword|listusers|loaddata|dumpdata|db ...>`. No reintroduzcas `create_all` ni `init-db`: el esquema solo cambia con migraciones.
 - PG local: `docker compose -f deploy/deploy-dev/compose.yml up -d db` (127.0.0.1:5433; base `app`, base de tests `pruebas`).
-- Tests: `TEST_DATABASE_URL=postgresql://app:app@127.0.0.1:5433/pruebas pytest` (sin la variable usa SQLite en memoria) y `bun test`. Los tests borran y recrean tablas: **nunca** apuntes `TEST_DATABASE_URL` a la base `app`.
+- Tests: `TEST_DATABASE_URL=postgresql://app:app@127.0.0.1:5433/pruebas python -m pytest` (con `python -m`: el `pytest` a secas no encuentra el paquete) (sin la variable usa SQLite en memoria) y `bun test`. Los tests borran y recrean tablas: **nunca** apuntes `TEST_DATABASE_URL` a la base `app`.
 - Toda lógica nueva no trivial lleva su test. Antes de dar algo por terminado, corre pytest (idealmente contra PG) y bun.
 
 ## Reglas de seguridad que no se relajan
